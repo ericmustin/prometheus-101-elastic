@@ -1,0 +1,8 @@
+// Did anything arrive at all?
+// The first question when remote write is new, and the only one worth asking
+// until the answer is yes.
+FROM ${DATA_STREAM}
+| WHERE @timestamp > NOW() - 15 minutes AND `labels.cluster` == "prometheus-101"
+| STATS samples = COUNT(*),
+        regions = COUNT_DISTINCT(`labels.region`),
+        services = COUNT_DISTINCT(`labels.service`)

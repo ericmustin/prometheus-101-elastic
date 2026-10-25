@@ -1,0 +1,19 @@
+Prometheus 101
+Copyright 2026 Eric Mustin
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This workshop is built around superdemo, https://github.com/ty-elastic/superdemo.
+
+Copied from superdemo unmodified:
+  src/router/
+  utils/redis/redis.yml
+  utils/ksm/ksm.sh
+  assets/scripts/retry.sh
+
+Adapted from superdemo:
+  build.sh
+  k8s/router.yaml
+  utils/prometheus-grafana/grafana.yaml
+
+These files remain the work of superdemo's authors.

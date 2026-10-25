@@ -1,0 +1,87 @@
+# The router — vendored from superdemo/src/router, unmodified.
+#
+# This is the only service in superdemo that exposes a Prometheus /metrics
+# endpoint. It uses prom-client plus express-prometheus-middleware, so it
+# emits two hand-written counters:
+#
+#   transactions                      every routed trade
+#   shares_traded{symbol,action}      shares, by symbol and buy/sell
+#
+# plus a default label region=$REGION, and the middleware's own
+# http_requests_total / http_request_duration_seconds_* families, and
+# prom-client's default nodejs_* process metrics.
+#
+# Note what is NOT here: a prometheus.io/scrape annotation. superdemo's
+# k8s/router.yaml does not have one either - which is why superdemo scrapes
+# this service by hardcoded hostname. Chapter 03 is about fixing that, and
+# adding the annotation is the first half of the fix.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router
+  namespace: $NAMESPACE
+  labels:
+    app: trading
+    service: router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: router
+  template:
+    metadata:
+      labels:
+        app: trading
+        service: router
+        app.kubernetes.io/version: "$SERVICE_VERSION"
+    spec:
+      containers:
+        - name: router
+          image: $REPO/router:$COURSE
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9000
+          env:
+            # Becomes the default label on every metric this process emits.
+            - name: REGION
+              value: "$REGION"
+            - name: REDIS_HOST
+              value: "redis-service.infra.svc.cluster.local:6379"
+            # superdemo fans out across two recorder implementations to compare
+            # them. The course runs one stub, so the proxy succeeds and the
+            # counters advance without dragging in Kafka, Postgres and MySQL.
+            - name: RECORDER_HOST_1
+              value: "recorder"
+            - name: PORT
+              value: "9000"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: router
+  namespace: $NAMESPACE
+  labels:
+    app: trading
+    service: router
+spec:
+  type: NodePort
+  selector:
+    service: router
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      # Published on the host as 9000 (na) / 9001 (emea), matching the ports
+      # superdemo exposes through Traefik in utils/traefik/values.yaml.
+      nodePort: $ROUTER_NODEPORT

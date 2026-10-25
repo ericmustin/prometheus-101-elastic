@@ -1,0 +1,14 @@
+// Request rate per region, from the trading app.
+//
+// The field shape is the whole lesson of the course in one query:
+//   values     -> metrics.http_requests_total     (underscored, _total suffix)
+//   dimensions -> labels.region, labels.namespace (Prometheus labels)
+// The same signal over OTLP would be metrics.http.server.requests and
+// attributes.region. Same app, different field model, because the path differed.
+TS ${DATA_STREAM}
+| WHERE TRANGE(1 hour)
+| STATS rps = SUM(RATE(`metrics.http_requests_total`, 1 minute))
+    BY region = `labels.region`, ns = `labels.namespace`, bucket = TBUCKET(1 minute)
+| WHERE rps IS NOT NULL
+| SORT bucket DESC, region
+| LIMIT 60

@@ -1,0 +1,16 @@
+# One namespace per region, exactly as superdemo does it.
+#
+# superdemo runs -r na,emea, giving trading-na and trading-emea. This course
+# defaults to the same two so that chapter 03's conversion from hardcoded
+# hostnames to service discovery has something real to discover.
+#
+# Applied by build.sh as:
+#   envsubst '$NAMESPACE' < k8s/_namespace.yaml | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $NAMESPACE
+  labels:
+    app: trading
+  annotations:
+    example.com/test: "true"

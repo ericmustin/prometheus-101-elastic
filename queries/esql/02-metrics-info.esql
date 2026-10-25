@@ -1,0 +1,15 @@
+// What did remote write actually create?
+//
+// Run this before writing any other query. Note what it says about
+// transactions and shares_traded: Elasticsearch infers metric type from the
+// NAME SUFFIX, and neither carries _total, so both arrive as GAUGES. RATE()
+// does not apply to them. That is a finding to report against superdemo's
+// src/router/app.ts, not something to work around here.
+TS ${DATA_STREAM}
+| WHERE TRANGE(30 minutes)
+| METRICS_INFO
+| WHERE metric_name LIKE "*transactions*" OR metric_name LIKE "*shares*"
+     OR metric_name LIKE "*http_request*" OR metric_name LIKE "*redis_up*"
+| KEEP metric_name, metric_type, field_type
+| SORT metric_name
+| LIMIT 20

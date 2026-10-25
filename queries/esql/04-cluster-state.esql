@@ -1,0 +1,15 @@
+// Cluster state in the same data stream as the application - which is the
+// point of centralising. Running pods per namespace, under the same
+// labels.namespace the trading app's series carry, so the two line up.
+FROM ${DATA_STREAM}
+| WHERE @timestamp > NOW() - 30 minutes
+    AND `metrics.kube_pod_status_phase` IS NOT NULL
+    AND `labels.phase` == "Running"
+// One row per pod per scrape, 1 if it is running: summing them per scrape
+// is the PromQL sum. Then keep the peak in each five minutes.
+| STATS pods = SUM(`metrics.kube_pod_status_phase`)
+    BY ns = `labels.namespace`, @timestamp
+| STATS running = MAX(pods)
+    BY ns, bucket = BUCKET(@timestamp, 5 minutes)
+| SORT bucket DESC, ns
+| LIMIT 40

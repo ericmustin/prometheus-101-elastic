@@ -1,0 +1,48 @@
+# Traffic, named after superdemo's load generator.
+#
+# superdemo's monkey (src/monkey/app.py) is a Flask service that also exposes
+# a chaos API for breaking things live in a demo. The course only
+# needs the traffic half, so this is a curl loop shaped to hit the router's
+# real query interface: customer_id, symbol, action and shares are what
+# populate shares_traded{symbol,action}.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monkey
+  namespace: $NAMESPACE
+  labels:
+    app: trading
+    service: monkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: monkey
+  template:
+    metadata:
+      labels:
+        app: trading
+        service: monkey
+    spec:
+      containers:
+        - name: monkey
+          image: curlimages/curl:8.11.1
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              symbols="AAPL ESTC MSFT NVDA"
+              actions="buy sell"
+              while true; do
+                sym="$(echo $symbols | tr ' ' '\n' | sed -n "$(( (RANDOM % 4) + 1 ))p")"
+                act="$(echo $actions | tr ' ' '\n' | sed -n "$(( (RANDOM % 2) + 1 ))p")"
+                cust=$(( (RANDOM % 10) + 1 ))
+                shares=$(( (RANDOM % 100) + 1 ))
+                curl -s -o /dev/null --max-time 5 \
+                  "http://router:9000/?customer_id=${cust}&symbol=${sym}&action=${act}&shares=${shares}" || true
+                sleep 0.3
+              done
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 96Mi}

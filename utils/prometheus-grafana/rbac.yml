@@ -1,0 +1,47 @@
+# Permission for Prometheus to ask the Kubernetes API what exists.
+#
+# NOT applied by scripts/setup.sh, which creates only the ServiceAccount. You
+# apply this yourself in chapter 03, after you have seen what happens without it:
+#
+#   kubectl -n infra logs deploy/prometheus | grep -i forbidden
+#   -> cannot list resource "pods" in API group "" in the namespace "trading-na"
+#
+# Every engineer hits this exactly once. Better here than in production.
+#
+# Cluster-scoped rather than namespaced because the discovery job in chapter
+# 03 watches three namespaces (trading-na, trading-emea, infra) and chapter
+# 04 adds kube-system.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: infra
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-101
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-101
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-101
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: infra

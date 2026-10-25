@@ -1,0 +1,40 @@
+# k3d cluster for Prometheus 101.
+#
+# Every service the course touches is a NodePort published on localhost, so
+# there is no `kubectl port-forward` anywhere and the tests have nothing flaky
+# to depend on.
+#
+# Three of the five host ports are chosen to match what superdemo exposes
+# through Traefik (superdemo/utils/traefik/values.yaml):
+#
+#   9000  trading-na router      <- traefik trading-na
+#   9001  trading-emea router    <- traefik trading-emea
+#   9012  Grafana                <- traefik grafana
+#
+# so a learner who finishes this course and opens a superdemo environment
+# finds the same things at the same addresses. That is free recognition for
+# the price of three comments.
+#
+# The ${...} values are substituted by scripts/setup.sh, which shifts all
+# ports by +20000 if any of them are already taken on your machine.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: prometheus-101
+servers: 1
+agents: 1
+ports:
+  - port: ${PROM_HOST_PORT}:30090          # Prometheus UI
+    nodeFilters: [loadbalancer]
+  - port: ${ROUTER_NA_HOST_PORT}:30900     # router, trading-na
+    nodeFilters: [loadbalancer]
+  - port: ${ROUTER_EMEA_HOST_PORT}:30901   # router, trading-emea
+    nodeFilters: [loadbalancer]
+  - port: ${GRAFANA_HOST_PORT}:30912       # Grafana
+    nodeFilters: [loadbalancer]
+options:
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*

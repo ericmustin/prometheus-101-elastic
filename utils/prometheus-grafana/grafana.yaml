@@ -1,0 +1,220 @@
+# Prometheus and Grafana, in the namespace and the single file superdemo puts
+# them in (superdemo/utils/prometheus-grafana/grafana.yaml).
+#
+# Two deliberate differences from superdemo, both recorded in
+# docs/SUPERDEMO-MAP.md because both are worth raising there:
+#
+#   1. The image is PINNED. superdemo runs `image: prom/prometheus` with no
+#      tag, so an upstream push silently changes the demo.
+#   2. There is a PVC. superdemo has none, so a pod restart loses all local
+#      history - which makes chapter 06's before/after comparison impossible
+#      and makes any "look at the last hour" moment a coin flip.
+#
+# The ConfigMap is NOT here. It is created by scripts/apply-config.sh from
+# prometheus/prometheus.yml, which is the file you edit. It is named
+# prom-config, as in superdemo.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: infra
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: infra
+  labels:
+    service: prometheus
+spec:
+  replicas: 1
+  # RWO volume: a RollingUpdate would try to attach the same PVC twice and
+  # deadlock. superdemo also uses Recreate, for a different reason (it has no
+  # volume at all).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      service: prometheus
+  template:
+    metadata:
+      labels:
+        service: prometheus
+    spec:
+      # The ServiceAccount RBAC is granted to, in chapter 03. It exists from
+      # setup so the pod can schedule; the ClusterRoleBinding does not.
+      serviceAccountName: prometheus
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsNonRoot: true
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.7.3
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=6h
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            # Mount the whole ConfigMap, never with subPath - a subPath mount
+            # is resolved once at container start and never sees an update.
+            - name: prom-config
+              mountPath: /etc/prometheus
+              readOnly: true
+            # The remote-write API key, as a file. Chapter 02's config points
+            # `credentials_file` here. Without this mount Prometheus retries
+            # forever and - importantly - samples_failed_total stays at zero,
+            # because a missing credentials file is a RETRYABLE error.
+            - name: elastic
+              mountPath: /etc/elastic
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+      volumes:
+        - name: prom-config
+          configMap:
+            name: prom-config
+        - name: elastic
+          secret:
+            # optional, so chapter 01 works with no Elastic credentials at all.
+            secretName: elastic-secret-otel
+            optional: true
+            items:
+              - key: api-key
+                path: api-key
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: infra
+  labels:
+    service: prometheus
+spec:
+  type: NodePort
+  selector:
+    service: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+      nodePort: 30090
+---
+# Grafana. Chapter 07 deploys it with `make grafana`.
+#
+# superdemo provisions TWO datasources, both `type: prometheus`: the real
+# Prometheus, and Elasticsearch's Prometheus-compatible read endpoint. That
+# pairing is the demo - point your existing Grafana at Elastic and change
+# nothing else.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: infra
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.infra.svc.cluster.local:9090
+        isDefault: false
+
+      # Chapter 07. superdemo provisions exactly this pair, and the point is
+      # that BOTH are type: prometheus - Elasticsearch's _prometheus endpoint
+      # speaks the Prometheus HTTP API, so nothing above the datasource has to
+      # change. Same dashboards, same PromQL, different storage.
+      #
+      # $ELASTIC_ES_URL and $DATA_STREAM are substituted by build.sh. superdemo
+      # hardcodes metrics-generic.prometheus-default here; rendering it from
+      # $DATA_STREAM means the explicit endpoint form works too.
+      - name: Elastic
+        type: prometheus
+        access: proxy
+        url: $ELASTIC_ES_URL/_prometheus/$DATA_STREAM
+        isDefault: true
+        jsonData:
+          httpHeaderName1: Authorization
+        secureJsonData:
+          httpHeaderValue1: ApiKey $ELASTIC_API_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: infra
+  labels:
+    service: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: grafana
+  template:
+    metadata:
+      labels:
+        service: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.6.0
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            # Anonymous admin, as superdemo does - this is a demo, not a
+            # tenanted install, and a login prompt on camera helps nobody.
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Admin"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: infra
+  labels:
+    service: grafana
+spec:
+  type: NodePort
+  selector:
+    service: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      # Host 9012, the port superdemo exposes Grafana on through Traefik.
+      nodePort: 30912

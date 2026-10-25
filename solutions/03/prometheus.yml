@@ -1,0 +1,47 @@
+# Prometheus 101
+#
+# This is the Prometheus configuration you edit. Every chapter changes it or
+# something next to it.
+#
+# After every edit:  make apply
+# To check yourself: make test
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # Stamped onto every series on the way OUT. superdemo sets none of these,
+  # which is why every series it ships is anonymous once it lands - you cannot
+  # tell one demo cluster's data from another's.
+  external_labels:
+    cluster: prometheus-101
+    env: lab
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+# A second, independent pipeline. Scraping can be perfectly healthy while this
+# is failing, and the other way round.
+remote_write:
+  - name: elastic
+    # Substituted by scripts/render-config.sh. This is superdemo's exact URL
+    # shape - zero routing segments - which lands in
+    # metrics-generic.prometheus-default.
+    url: "${ELASTIC_PROM_RW_ENDPOINT}"
+
+    authorization:
+      type: ApiKey
+      # superdemo inlines the key here as `credentials:`. This config becomes
+      # a ConfigMap, and a ConfigMap is plaintext to anyone with kubectl.
+      credentials_file: /etc/elastic/api-key
+
+    # The shock absorber. Tune it when the receiving system is slow or is
+    # rate-limiting you; samples_pending is how you find out that you need to.
+    queue_config:
+      capacity: 2500
+      max_shards: 4
+      min_shards: 1
+      max_samples_per_send: 500
+      batch_send_deadline: 5s

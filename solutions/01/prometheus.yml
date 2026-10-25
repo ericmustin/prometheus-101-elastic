@@ -1,0 +1,13 @@
+# Prometheus 101
+#
+# This is the Prometheus configuration you edit. Every chapter changes it or
+# something next to it.
+#
+# After every edit:  make apply
+# To check yourself: make test
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs: []

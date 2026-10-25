@@ -1,0 +1,104 @@
+# Prometheus 101
+#
+# This is the Prometheus configuration you edit. Every chapter changes it or
+# something next to it.
+#
+# After every edit:  make apply
+# To check yourself: make test
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # Stamped onto every series on the way OUT. superdemo sets none of these,
+  # which is why every series it ships is anonymous once it lands - you cannot
+  # tell one demo cluster's data from another's.
+  external_labels:
+    cluster: prometheus-101
+    env: lab
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # One job for every workload in the namespaces, discovered by annotation.
+  #
+  # Compare this with what superdemo actually ships
+  # (superdemo/utils/prometheus-grafana/grafana.yaml):
+  #
+  #     - job_name: prometheus            <- a job named prometheus that does
+  #       static_configs:                    not scrape Prometheus
+  #       - targets:
+  #         - router.trading-na.svc.cluster.local:9000
+  #         - router.trading-emea.svc.cluster.local:9000
+  #         - redis-service.infra.svc.cluster.local:9000
+  #         labels:
+  #           namespace: 'infra'          <- stamped on all three, and two of
+  #                                          them are not in infra
+  #
+  # Three hostnames maintained by hand, and a label that is wrong for two
+  # thirds of its targets. Nothing here names a workload; pods declare how to
+  # scrape them and these rules honour the declaration.
+  - job_name: kubernetes-pods
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ["trading-na", "trading-emea", "infra"]
+
+    relabel_configs:
+      # 1. Opt-in. Without this you scrape every container port in every
+      #    namespace, most of which do not serve metrics.
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: "true"
+
+      # 2. Point at the port the pod nominated. role: pod produces one
+      #    candidate per declared container port; rewriting the address makes
+      #    them identical, and Prometheus deduplicates identical targets.
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+
+      # 3. Honour a custom path, for exporters that do not serve /metrics.
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+
+      # 4. Real identity, one rule each. The tempting labelmap shortcut also
+      #    imports pod_template_hash, which changes on every deploy.
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_label_service]
+        target_label: service
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+
+# A second, independent pipeline. Scraping can be perfectly healthy while this
+# is failing, and the other way round.
+remote_write:
+  - name: elastic
+    # Substituted by scripts/render-config.sh. This is superdemo's exact URL
+    # shape - zero routing segments - which lands in
+    # metrics-generic.prometheus-default.
+    url: "${ELASTIC_PROM_RW_ENDPOINT}"
+
+    authorization:
+      type: ApiKey
+      # superdemo inlines the key here as `credentials:`. This config becomes
+      # a ConfigMap, and a ConfigMap is plaintext to anyone with kubectl.
+      credentials_file: /etc/elastic/api-key
+
+    # The shock absorber. Tune it when the receiving system is slow or is
+    # rate-limiting you; samples_pending is how you find out that you need to.
+    queue_config:
+      capacity: 2500
+      max_shards: 4
+      min_shards: 1
+      max_samples_per_send: 500
+      batch_send_deadline: 5s

@@ -1,0 +1,74 @@
+# A stand-in for superdemo's recorder tier.
+#
+# superdemo routes each trade to one of recorder-java (Postgres),
+# recorder-go (MySQL) or recorder-go-zero (eBPF canary). None of that is
+# interesting to a Prometheus course, and all of it is expensive to run, so
+# the course substitutes an nginx that returns 200 to anything.
+#
+# The router's counters increment inside customRouter() BEFORE the proxy call,
+# so strictly this is not needed for metrics to flow - but without it every
+# routed request logs a proxy error, and a course should not ship a workload
+# that is permanently on fire.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recorder
+  namespace: $NAMESPACE
+  labels:
+    app: trading
+    service: recorder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: recorder
+  template:
+    metadata:
+      labels:
+        app: trading
+        service: recorder
+    spec:
+      containers:
+        - name: recorder
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 9003
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+      volumes:
+        - name: conf
+          configMap:
+            name: recorder-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recorder-config
+  namespace: $NAMESPACE
+data:
+  default.conf: |
+    server {
+      listen 9003;
+      location / { return 200 'recorded\n'; add_header Content-Type text/plain; }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recorder
+  namespace: $NAMESPACE
+  labels:
+    app: trading
+    service: recorder
+spec:
+  selector:
+    service: recorder
+  ports:
+    - name: http
+      port: 9003
+      targetPort: http

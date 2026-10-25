@@ -1,0 +1,18 @@
+// Everything chapters 02 and 03 built, in one row.
+//   labels.cluster / env         <- external_labels        (chapter 02)
+//   labels.namespace / service   <- relabel_configs        (chapter 03)
+//   labels.region / symbol       <- the application itself
+//
+// superdemo sets no external_labels, so the first two are empty there. And it
+// stamps namespace: 'infra' on all three of its static targets, two of which
+// are not in infra - so the third is wrong there too.
+FROM ${DATA_STREAM}
+// Filtered to an application metric on purpose. up and scrape_* are
+// synthesised by Prometheus per target, so they carry the labels YOU set but
+// not the ones prom-client sets inside the process - region would be null.
+| WHERE @timestamp > NOW() - 15 minutes
+    AND `labels.service` == "router"
+    AND `metrics.http_requests_total` IS NOT NULL
+| KEEP `labels.cluster`, `labels.env`, `labels.namespace`, `labels.service`,
+       `labels.pod`, `labels.region`
+| LIMIT 5

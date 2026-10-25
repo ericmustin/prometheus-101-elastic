@@ -1,0 +1,125 @@
+# EDOT Collector, local variant.
+#
+# superdemo selects its collector values file with the -o flag
+# (agents/apm/serverless.yaml, agents/apm/stack.yaml) and installs the
+# opentelemetry-kube-stack Helm chart with three collector tiers, Fleet
+# enrolment over OpAMP, and tail-based sampling. None of that fits in a
+# one-hour local workshop, so this is one collector, deployed directly, on
+# the same image superdemo runs: docker.elastic.co/elastic-agent/elastic-agent
+# invoked as `elastic-agent otel`.
+#
+# What it is here to teach, in chapter 05:
+#
+#   1. A collector is just another scrape target. superdemo's collectors do
+#      NOT expose a Prometheus endpoint - their self-telemetry goes out over
+#      OTLP to the gateway on :4319. Turning on a pull reader is a real change
+#      you would make to agents/apm/serverless.yaml, and it is what lets you
+#      answer "is the collector dropping my data" with PromQL.
+#
+#   2. A collector can also BE a Prometheus. The prometheus receiver below
+#      scrapes the router directly, which is the producer superdemo is missing
+#      for the metrics-prometheusreceiver.otel-default tab of its own
+#      "Prometheus" saved search.
+#
+# Port 8889, not the usual 8888, so this does not collide if you later run
+# something with hostNetwork: true.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: infra
+data:
+  collector.yaml: |
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: router-via-otel
+              scrape_interval: 15s
+              static_configs:
+                - targets:
+                    - router.trading-na.svc.cluster.local:9000
+                    - router.trading-emea.svc.cluster.local:9000
+
+    processors:
+      batch: {}
+
+    exporters:
+      # Chapter 05 leaves this as debug. Pointing it at Elastic is the
+      # exercise that fills superdemo's empty saved-search tab.
+      debug:
+        verbosity: basic
+
+    service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8889
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [batch]
+          exporters: [debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: infra
+  labels:
+    service: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: otel-collector
+  template:
+    metadata:
+      labels:
+        service: otel-collector
+      annotations:
+        # The same two annotations every other scrape target in this course
+        # carries. Chapter 03's discovery rules pick the collector up without
+        # any change to prometheus.yml - which is the point.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8889"
+    spec:
+      containers:
+        - name: otel-collector
+          image: docker.elastic.co/elastic-agent/elastic-agent:9.5.0
+          args: ["otel", "--config=/etc/otel/collector.yaml"]
+          env:
+            - name: ELASTIC_AGENT_OTEL
+              value: '"true"'
+          ports:
+            - name: telemetry
+              containerPort: 8889
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {memory: 768Mi}
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: infra
+  labels:
+    service: otel-collector
+spec:
+  selector:
+    service: otel-collector
+  ports:
+    - name: telemetry
+      port: 8889
+      targetPort: telemetry
