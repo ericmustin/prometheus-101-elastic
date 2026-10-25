@@ -163,6 +163,8 @@ docs/SUPERDEMO-MAP.md       what you built, and where it is in superdemo
 
 The trading app and much of the deployment come from [superdemo](https://github.com/ty-elastic/superdemo). `src/router/`, `utils/redis/redis.yml`, `utils/ksm/ksm.sh` and `assets/scripts/retry.sh` are copied from it unmodified, and `build.sh`, `k8s/router.yaml` and `utils/prometheus-grafana/grafana.yaml` are adapted from it. See `NOTICE`.
 
+The idea of a free, self-paced, hands-on Prometheus workshop comes from Eric D. Schabell's [Getting started with Prometheus](https://gitlab.com/o11y-workshops/workshop-prometheus) workshop from [o11y-workshops](https://gitlab.com/o11y-workshops). If you want Prometheus on its own, without Elastic, start there.
+
 ## License
 
 [Apache License 2.0](LICENSE).

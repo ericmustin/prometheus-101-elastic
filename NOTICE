@@ -17,3 +17,7 @@ Adapted from superdemo:
   utils/prometheus-grafana/grafana.yaml
 
 These files remain the work of superdemo's authors.
+
+Inspired by Getting started with Prometheus, Eric D. Schabell's workshop from
+o11y-workshops, https://gitlab.com/o11y-workshops/workshop-prometheus.
+No files are copied from it.

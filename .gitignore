@@ -5,3 +5,6 @@
 *.local.ndjson
 *.log
 .DS_Store
+
+# Local slide deck (deck/README.md); not published
+deck/
