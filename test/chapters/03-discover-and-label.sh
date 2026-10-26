@@ -1,12 +1,12 @@
-# Chapter 03: superdemo's hardcoded hostnames become annotation discovery.
+# Chapter 03: named targets become annotation discovery.
 regions="$(echo "${REGION}" | tr ',' ' ')"
 want_routers="$(echo "${regions}" | wc -w | tr -d ' ')"
 
 wait_for_healthy_targets kubernetes-pods "${want_routers}" 180 || true
 
-# The routers. superdemo's k8s/router.yaml has no prometheus.io/scrape
-# annotation, so half of this chapter is adding it - the platform team cannot
-# discover what the workload owner has not declared.
+# The routers. k8s/router.yaml starts without a prometheus.io/scrape
+# annotation, so half of this chapter is adding it - Prometheus cannot
+# discover what the workload has not declared.
 routers="$(prom_targets | jq -r \
   '[.data.activeTargets[] | select(.labels.service == "router" and .health == "up")] | length' 2>/dev/null || echo 0)"
 assert_ge "${routers}" "${want_routers}" \
@@ -25,18 +25,27 @@ fi
 down="$(prom_targets | jq -r '[.data.activeTargets[] | select(.health == "down")] | length' 2>/dev/null || echo 0)"
 assert_eq "${down}" "0" "no target is down"
 
-# THE assertion of this chapter. superdemo stamps labels: {namespace: 'infra'}
-# on all three of its static targets, and two of them are not in infra. Real
-# discovery gets it right per target.
+# Discovery labels each target with the namespace it actually runs in, which
+# named targets cannot do without someone typing it in.
 ns_correct="$(prom_targets | jq -r \
   '[.data.activeTargets[] | select(.labels.service == "router")
     | select(.labels.namespace | startswith("trading-"))] | length' 2>/dev/null || echo 0)"
 assert_ge "${ns_correct}" "${want_routers}" \
-  "each router is labelled with its OWN namespace (superdemo labels all three 'infra')"
+  "each router is labelled with its own namespace"
 
-# The redis_exporter sidecar. Its annotations have been in superdemo's
-# utils/redis/redis.yml since day one, doing nothing, because superdemo
-# scrapes by hostname. Here they are what finds it - no extra config.
+# The named targets are gone, so each router is scraped once, by discovery.
+# Only checked once discovery has found the routers, so an empty Targets page
+# cannot pass it.
+named="$(prom_targets | jq -r '[.data.activeTargets[] | select(.labels.job == "trading-app")] | length' 2>/dev/null || echo "")"
+if [[ "${routers}" -lt 1 || -z "${named}" ]]; then
+  fail "the trading-app job is gone, so each router is scraped once" \
+    "no router has been discovered yet, so there is nothing to compare against"
+else
+  assert_eq "${named}" "0" "the trading-app job is gone, so each router is scraped once"
+fi
+
+# The redis_exporter sidecar. utils/redis/redis.yml already carries the scrape
+# annotations, so the same rules find it - no extra config.
 assert_ge "$(prom_count 'redis_up')" 1 \
   "the redis_exporter sidecar was found by the same rules, with no extra config"
 
@@ -51,7 +60,7 @@ else
     "pod_template_hash was NOT imported onto the series"
 fi
 
-# superdemo's own metric names, in Prometheus.
+# The router's own metric names, in Prometheus.
 assert_ge "$(prom_count 'transactions')"  1 "transactions is being collected"
 assert_ge "$(prom_count 'shares_traded')" 1 "shares_traded is being collected"
 

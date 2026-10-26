@@ -10,7 +10,7 @@ scrape_configs: []
 
 Seven chapters later you have superdemo's trading app, its Redis exporter, kube-state-metrics and an EDOT collector all discovered automatically, their metrics in Elastic Serverless via remote write, the expensive ones filtered out, and Grafana pointed at Elastic with its dashboards unchanged.
 
-Everything you touch is superdemo's — its `router` service vendored unmodified, its namespaces, ports, `build.sh` idiom, remote write endpoint and data stream. Finish this and `superdemo/utils/prometheus-grafana/grafana.yaml` reads as something you have already written.
+The app and its layout come from superdemo: its `router` service, namespaces, ports, `build.sh` idiom, remote write endpoint and data stream. So when you open superdemo afterwards, its Prometheus setup will look familiar.
 
 **Designed as a one-hour workshop**, assuming setup is done in advance.
 
@@ -101,7 +101,7 @@ There are no branches. Editing `prometheus/prometheus.yml` and running `make cha
 |---|---|---|---|
 | 01 | Scrape yourself | targets, jobs, `up`, the exposition format | wrong port → target down |
 | 02 | **Get it into Elastic** | remote write, `external_labels` | two failure modes, each hiding from the other's metric |
-| 03 | Scrape the trading app | superdemo's real config and its three problems | RE2 has no backreferences |
+| 03 | Scrape the trading app | static targets, Kubernetes discovery, relabeling | RBAC first, then RE2 has no backreferences |
 | 04 | Scrape the platform | kube-state-metrics, exporters, jobs as grouping | the chart annotates the Service, not the pod |
 | 05 | Scrape the collector | `otelcol_*`, pull vs periodic readers | a counter that never counted is absent, not zero |
 | 06 | Decide what you pay for | allow lists vs drop lists, and where each belongs | anchored regexes match nothing, silently |

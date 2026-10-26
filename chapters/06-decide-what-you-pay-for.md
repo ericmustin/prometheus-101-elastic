@@ -6,7 +6,7 @@
 
 ## The idea
 
-You now forward everything you collect to a system that charges for what it stores. superdemo has no filtering at all — at three targets, the right call. You are at five, one of which is kube-state-metrics.
+You now forward everything you collect to a system that charges for what it stores. You are scraping five targets, and one of them is kube-state-metrics.
 
 Start with the number chapter 01 asked you to remember:
 

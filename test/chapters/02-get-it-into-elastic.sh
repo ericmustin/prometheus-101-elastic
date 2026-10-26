@@ -35,8 +35,8 @@ else
        "nothing arrived within 5 minutes - check the endpoint path and API key"
 fi
 
-# superdemo sets no external_labels at all, so everything it ships is
-# anonymous once it lands. This is the assertion that says yours is not.
+# Without external_labels every series is anonymous once it lands. This is the
+# assertion that says yours is not.
 rows="$(wait_for_esql_rows "FROM ${DATA_STREAM} | WHERE @timestamp > NOW() - 2 minutes AND \`labels.cluster\` == \"prometheus-101\" | LIMIT 1")"
 assert_ge "${rows}" 1 "documents carry labels.cluster from external_labels"
 

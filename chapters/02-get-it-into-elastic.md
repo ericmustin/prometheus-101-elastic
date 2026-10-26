@@ -125,7 +125,7 @@ make apply
 
 **`credentials_file`, not `credentials`** — this becomes a ConfigMap, and a ConfigMap is plaintext to anyone with `kubectl`. `make apply` refuses to ship a pasted key.
 
-**`external_labels`** are stamped on the way out and do not exist locally. superdemo sets none, so everything it writes is anonymous once it lands.
+**`external_labels`** are stamped on the way out and do not exist locally. Without them, every series is anonymous once it lands: one cluster's data looks like any other's.
 
 **`queue_config`** is the shock absorber; `samples_pending` tells you when to tune it.
 

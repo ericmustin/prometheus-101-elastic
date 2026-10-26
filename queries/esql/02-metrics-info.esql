@@ -3,8 +3,8 @@
 // Run this before writing any other query. Note what it says about
 // transactions and shares_traded: Elasticsearch infers metric type from the
 // NAME SUFFIX, and neither carries _total, so both arrive as GAUGES. RATE()
-// does not apply to them. That is a finding to report against superdemo's
-// src/router/app.ts, not something to work around here.
+// does not apply to them. When you need a rate, use a counter such as
+// http_requests_total.
 TS ${DATA_STREAM}
 | WHERE TRANGE(30 minutes)
 | METRICS_INFO

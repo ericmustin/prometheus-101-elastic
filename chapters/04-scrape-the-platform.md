@@ -1,6 +1,6 @@
 # Chapter 04 — Scrape the platform
 
-**Goal:** collect cluster state from the exporter superdemo already installs and has never once scraped.
+**Goal:** collect cluster state with kube-state-metrics, and see why it needs a job of its own.
 
 ---
 
@@ -10,13 +10,13 @@ So far you have collected application metrics, which answer "is the service heal
 
 That layer is what **exporters** are for: a process translating something into the Prometheus exposition format. There are hundreds, and you already met one without noticing — the `redis_exporter` sidecar that appeared for free in chapter 03.
 
-For cluster state the standard is **kube-state-metrics**. superdemo installs it in eight lines and never scrapes it.
+For cluster state the standard is **kube-state-metrics**, one Helm install:
 
 ```bash
 make ksm
 ```
 
-superdemo's script, unmodified. Now check the Targets page.
+That runs `utils/ksm/ksm.sh`, the same script superdemo uses. Now check the Targets page.
 
 **Nothing.** For the first time in three chapters, a new workload did *not* appear.
 
@@ -129,7 +129,7 @@ make test
 | | |
 |---|---|
 | **Exporters** | translate anything into the Prometheus format |
-| **kube-state-metrics** | cluster state; superdemo installs it and never scrapes it |
+| **kube-state-metrics** | cluster state, from one Helm install |
 | **Service vs pod annotations** | a real convention split; some things must be named |
 | **Two ports** | the one called `metrics` is often not the metrics you want |
 | **Cluster cardinality** | scales with the cluster, and grows when capacity does |

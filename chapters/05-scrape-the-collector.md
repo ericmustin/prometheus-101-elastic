@@ -1,26 +1,14 @@
 # Chapter 05 — Scrape the collector
 
-**Goal:** be able to answer "is the collector dropping my data" — which in a superdemo environment you currently cannot.
+**Goal:** scrape an OpenTelemetry collector's own metrics, so you can tell whether it is dropping data.
 
 ---
 
 ## The idea
 
-superdemo's telemetry does not go through Prometheus at all. It goes through three tiers of EDOT collectors, which raises a question someone will ask you sooner or later: **when telemetry goes missing, how do you tell whether the collector is the problem?**
+Between your apps and Elastic there is often a collector, and when telemetry goes missing someone will ask: **is the collector dropping it?**
 
-Right now, mostly you cannot. From superdemo's `agents/apm/serverless.yaml`:
-
-```yaml
-        telemetry:
-          metrics:
-            readers:
-              - periodic:
-                  exporter:
-                    otlp:
-                      endpoint: "http://opentelemetry-kube-stack-gateway-collector-headless:4319"
-```
-
-Self-telemetry goes over OTLP to the gateway. Reasonable — and it means there is **no Prometheus endpoint anywhere in superdemo**, so none of the tooling you have spent four chapters building can see it. This chapter is the six-line fix.
+The collector can answer that itself. It counts what it receives, refuses, sends and fails to send, and where those counts go is configuration. superdemo's collectors send theirs over OTLP to a gateway. Here you give one collector a Prometheus endpoint instead, and let chapter 03's rules find it.
 
 ---
 
@@ -30,7 +18,7 @@ Self-telemetry goes over OTLP to the gateway. Reasonable — and it means there 
 make collector
 ```
 
-One collector rather than superdemo's three tiers, on the same image (`elastic-agent:9.5.0`, invoked as `elastic-agent otel`).
+One collector, on the same image superdemo runs (`elastic-agent:9.5.0`, invoked as `elastic-agent otel`).
 
 Look at the Targets page. **It is already there** — chapter 03's rules found it, because the manifest carries the same two annotations everything else does. Third workload, still zero scrape config.
 
@@ -52,9 +40,9 @@ The annotations, and the reader in this repo's `agents/apm/local.yaml` that give
                     port: 8889
 ```
 
-A `pull` reader instead of superdemo's `periodic`/`otlp` one: the collector now serves its own metrics in Prometheus format.
+A `pull` reader: the collector serves its own metrics in Prometheus format, on a port, for anything to scrape. A `periodic` reader would push them over OTLP instead.
 
-Port **8889**, not the conventional 8888, because superdemo's daemonset collector runs `hostNetwork: true` — a port you bind is a port on the node.
+Port **8889**, not the usual 8888. A collector that runs with `hostNetwork: true`, as node-level collectors often do, binds its ports on the node itself, so two collectors on one node cannot both have 8888.
 
 ---
 
@@ -100,14 +88,14 @@ Look at what else `agents/apm/local.yaml` has this collector doing:
 
 It is scraping the router. A collector with a `prometheus` receiver **is** a Prometheus for collection purposes.
 
-This matters in superdemo specifically: `assets/objects/metrics_esql.ndjson` ships a saved search whose third tab queries `TS metrics-prometheusreceiver.otel-default`, and **nothing in superdemo writes there**. Two doors are closed — `scrape_configs_file: ""` in `agents/apm/serverless.yaml`, and no `io.opentelemetry.discovery.metrics` annotation on the router. Pointing this receiver's exporter at Elastic opens one.
-
-Two ways to get the router's metrics into Elastic, and superdemo has the plumbing for both:
+That gives you two ways to get the router's metrics into Elastic:
 
 | | Path | Lands in |
 |---|---|---|
 | What you built | router → Prometheus → remote write | `metrics-generic.prometheus-default` |
-| What superdemo half-built | router → collector → OTLP | `metrics-prometheusreceiver.otel-default` |
+| A collector as the scraper | router → collector → OTLP | `metrics-prometheusreceiver.otel-default` |
+
+Here the collector's receiver exports to `debug`, so only the first one writes to Elastic.
 
 Neither is wrong. Remote write gives you `metrics.*` / `labels.*` and the Prometheus read API; OTLP gives you the OTel field model and everything else the collector can do on the way through. What you should not do is run both by accident and wonder why one metric has two shapes.
 
@@ -123,11 +111,11 @@ make test
 
 | | |
 |---|---|
-| **Collectors are scrape targets** | if you give them an endpoint, which superdemo does not |
+| **Collectors are scrape targets** | once a `pull` reader gives them an endpoint |
 | **`pull` vs `periodic` readers** | Prometheus format on a port, or OTLP to a gateway |
 | **The four counters** | accepted / refused / sent / send_failed, read as a pipeline |
 | **Lazy metric creation** | a counter that never counted is absent, not zero |
 | **`hostNetwork`** | a port you bind is a port on the node |
-| **A collector can be a Prometheus** | and in superdemo that path is wired but switched off |
+| **A collector can be a Prometheus** | a `prometheus` receiver scrapes, then exports over OTLP |
 
 Next: the bill.

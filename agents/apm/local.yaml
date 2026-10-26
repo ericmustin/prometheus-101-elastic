@@ -10,16 +10,13 @@
 #
 # What it is here to teach, in chapter 05:
 #
-#   1. A collector is just another scrape target. superdemo's collectors do
-#      NOT expose a Prometheus endpoint - their self-telemetry goes out over
-#      OTLP to the gateway on :4319. Turning on a pull reader is a real change
-#      you would make to agents/apm/serverless.yaml, and it is what lets you
+#   1. A collector is just another scrape target. The pull reader below gives
+#      it a Prometheus endpoint for its own metrics, which is what lets you
 #      answer "is the collector dropping my data" with PromQL.
 #
 #   2. A collector can also BE a Prometheus. The prometheus receiver below
-#      scrapes the router directly, which is the producer superdemo is missing
-#      for the metrics-prometheusreceiver.otel-default tab of its own
-#      "Prometheus" saved search.
+#      scrapes the router directly. Exported to Elastic over OTLP, that data
+#      would land in metrics-prometheusreceiver.otel-default.
 #
 # Port 8889, not the usual 8888, so this does not collide if you later run
 # something with hostNetwork: true.
@@ -45,8 +42,8 @@ data:
       batch: {}
 
     exporters:
-      # Chapter 05 leaves this as debug. Pointing it at Elastic is the
-      # exercise that fills superdemo's empty saved-search tab.
+      # Chapter 05 leaves this as debug, so nothing from the prometheus
+      # receiver reaches Elastic.
       debug:
         verbosity: basic
 

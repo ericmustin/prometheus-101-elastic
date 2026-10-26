@@ -1,14 +1,11 @@
 # Prometheus and Grafana, in the namespace and the single file superdemo puts
 # them in (superdemo/utils/prometheus-grafana/grafana.yaml).
 #
-# Two deliberate differences from superdemo, both recorded in
-# docs/SUPERDEMO-MAP.md because both are worth raising there:
+# Two additions for the workshop:
 #
-#   1. The image is PINNED. superdemo runs `image: prom/prometheus` with no
-#      tag, so an upstream push silently changes the demo.
-#   2. There is a PVC. superdemo has none, so a pod restart loses all local
-#      history - which makes chapter 06's before/after comparison impossible
-#      and makes any "look at the last hour" moment a coin flip.
+#   1. The image is pinned, so an upstream push cannot change it under you.
+#   2. There is a PVC, so a pod restart keeps local history - chapter 06's
+#      before/after comparison depends on it.
 #
 # The ConfigMap is NOT here. It is created by scripts/apply-config.sh from
 # prometheus/prometheus.yml, which is the file you edit. It is named

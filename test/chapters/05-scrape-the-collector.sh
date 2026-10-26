@@ -4,9 +4,8 @@ if ! kubectl -n infra get deploy otel-collector >/dev/null 2>&1; then
 else
   pass "the EDOT collector is deployed"
 
-  # superdemo's collectors ship self-telemetry over OTLP to the gateway on
-  # :4319 and expose no Prometheus endpoint at all. Turning on a pull reader
-  # is a real edit to agents/apm/serverless.yaml, and this is it.
+  # A pull reader gives the collector a Prometheus endpoint for its own
+  # metrics, and chapter 03's rules find it by its annotations.
   wait_for_healthy_targets kubernetes-pods 3 180 || true
   coll="$(prom_targets | jq -r \
     '[.data.activeTargets[] | select(.labels.service == "otel-collector" and .health == "up")] | length' 2>/dev/null || echo 0)"

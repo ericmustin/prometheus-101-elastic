@@ -11,10 +11,8 @@
 # http_requests_total / http_request_duration_seconds_* families, and
 # prom-client's default nodejs_* process metrics.
 #
-# Note what is NOT here: a prometheus.io/scrape annotation. superdemo's
-# k8s/router.yaml does not have one either - which is why superdemo scrapes
-# this service by hardcoded hostname. Chapter 03 is about fixing that, and
-# adding the annotation is the first half of the fix.
+# Chapter 03 adds a prometheus.io/scrape annotation to the pod template, so
+# that Prometheus discovers this service instead of being given its hostname.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

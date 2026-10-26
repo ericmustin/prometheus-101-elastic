@@ -10,9 +10,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-  # Stamped onto every series on the way OUT. superdemo sets none of these,
-  # which is why every series it ships is anonymous once it lands - you cannot
-  # tell one demo cluster's data from another's.
+  # Stamped onto every series on the way OUT. Without them every series is
+  # anonymous once it lands - you cannot tell one cluster's data from
+  # another's.
   external_labels:
     cluster: prometheus-101
     env: lab
@@ -23,23 +23,8 @@ scrape_configs:
       - targets: ["localhost:9090"]
 
   # One job for every workload in the namespaces, discovered by annotation.
-  #
-  # Compare this with what superdemo actually ships
-  # (superdemo/utils/prometheus-grafana/grafana.yaml):
-  #
-  #     - job_name: prometheus            <- a job named prometheus that does
-  #       static_configs:                    not scrape Prometheus
-  #       - targets:
-  #         - router.trading-na.svc.cluster.local:9000
-  #         - router.trading-emea.svc.cluster.local:9000
-  #         - redis-service.infra.svc.cluster.local:9000
-  #         labels:
-  #           namespace: 'infra'          <- stamped on all three, and two of
-  #                                          them are not in infra
-  #
-  # Three hostnames maintained by hand, and a label that is wrong for two
-  # thirds of its targets. Nothing here names a workload; pods declare how to
-  # scrape them and these rules honour the declaration.
+  # Nothing here names a workload: pods declare how to be scraped, and these
+  # rules honour the declaration.
   - job_name: kubernetes-pods
     kubernetes_sd_configs:
       - role: pod
@@ -79,9 +64,9 @@ scrape_configs:
       - source_labels: [__meta_kubernetes_pod_node_name]
         target_label: node
 
-  # kube-state-metrics, which superdemo installs (utils/ksm/ksm.sh) and then
-  # never scrapes. The chart annotates the Service, not the pod, so the
-  # annotation rules above do not find it - it needs naming.
+  # kube-state-metrics, installed by utils/ksm/ksm.sh. The chart annotates the
+  # Service, not the pod, so the annotation rules above do not find it - it
+  # needs naming.
   - job_name: kube-state-metrics
     kubernetes_sd_configs:
       - role: pod
@@ -111,8 +96,8 @@ remote_write:
 
     authorization:
       type: ApiKey
-      # superdemo inlines the key here as `credentials:`. This config becomes
-      # a ConfigMap, and a ConfigMap is plaintext to anyone with kubectl.
+      # Read from a file, so the key never appears in this config. This config
+      # becomes a ConfigMap, and a ConfigMap is plaintext to anyone with kubectl.
       credentials_file: /etc/elastic/api-key
 
     # The shock absorber. Tune it when the receiving system is slow or is

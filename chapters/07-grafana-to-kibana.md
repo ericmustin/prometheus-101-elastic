@@ -92,12 +92,11 @@ Follow the `open:` link. It is superdemo's `assets/objects/metrics_esql.ndjson`,
 | Tab | Query | Against your data |
 |---|---|---|
 | `node.js prom (remote_write)` | `TS metrics-generic.prometheus-default` | works — what chapter 02 built |
-| `PROMQL` | `PROMQL index=metrics-* … sum by (region) (rate(metrics.http_requests_total[5m]))` | works, and groups by `region` — which only has a value because of chapter 03 |
-| third tab | `TS metrics-prometheusreceiver.otel-default` | **nothing of yours** |
+| `PROMQL` | `PROMQL index=metrics-* … sum by (region) (rate(metrics.http_requests_total[5m]))` | works, and groups by `region`, which has a value once chapter 03 scrapes the routers |
 
-The middle one is worth saying out loud: PromQL, typed into Kibana, over a data stream, grouped by a label you created with a relabel rule. Two chapters of your work in one query somebody else wrote.
+The second one is worth saying out loud: PromQL, typed into Kibana, over a data stream, grouped by a label that arrived with the router's metrics in chapter 03. Two chapters of your work in one query somebody else wrote.
 
-The third tab is the gap chapter 05 explained — your collector exports to `debug`, so it writes nothing there. **If you share a project with other demos**, that data stream is not course-specific and may already hold unrelated data; check the timestamps.
+Its third tab reads `metrics-prometheusreceiver.otel-default`, the collector-as-scraper path from chapter 05. Your collector exports to `debug`, so that tab stays empty. **If you share a project with other demos**, that data stream is not course-specific and may already hold unrelated data; check the timestamps.
 
 ---
 
@@ -117,8 +116,8 @@ The test runs a PromQL query through Grafana's proxy against the Elastic datasou
 | **Nothing above the datasource changes** | same PromQL, same panels, same dashboards |
 | **Retention is the argument** | six hours vs however long you pay for |
 | **The subset is real** | queries, panels and variables port; exemplars do not |
-| **superdemo's saved search** | works against your data unmodified, and one tab is empty for a reason |
+| **superdemo's saved search** | works against your data unmodified |
 
 That is the workshop.
 
-Read `docs/SUPERDEMO-MAP.md` next. It is one page: what you built, where the same thing lives in superdemo, and the eight differences small enough to open a PR for.
+When you open superdemo next, `docs/SUPERDEMO-MAP.md` shows where each piece you built lives there.

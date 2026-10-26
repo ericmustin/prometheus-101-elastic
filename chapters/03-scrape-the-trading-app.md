@@ -1,76 +1,60 @@
 # Chapter 03 — Scrape the trading app
 
-**Goal:** start from the scrape config superdemo actually ships, find its three problems, and replace it with one that does not need editing when someone adds a service.
+**Goal:** scrape the trading app by naming its targets, see why that stops scaling, then let Kubernetes tell Prometheus what to scrape and how to label it.
 
 ---
 
-## What superdemo actually runs
+## Start by naming the targets
 
-From `superdemo/utils/prometheus-grafana/grafana.yaml`, unedited:
-
-```yaml
-scrape_configs:
-  - job_name: prometheus
-    honor_timestamps: true
-    metrics_path: /metrics
-    scheme: http
-    static_configs:
-    - targets:
-      - router.trading-na.svc.cluster.local:9000
-      - router.trading-emea.svc.cluster.local:9000
-      - redis-service.infra.svc.cluster.local:9000
-      labels:
-        namespace: 'infra'
-```
-
-You already have a job called `prometheus`, and Prometheus rejects two jobs with the same name. Add superdemo's targets to yours as a second `static_configs` entry:
+The quickest way to scrape something is to list it. Add a second job to `prometheus/prometheus.yml`, below `prometheus`:
 
 ```yaml
-scrape_configs:
-  - job_name: prometheus
+  - job_name: trading-app
     static_configs:
-      - targets: ["localhost:9090"]
       - targets:
         - router.trading-na.svc.cluster.local:9000
         - router.trading-emea.svc.cluster.local:9000
         - redis-service.infra.svc.cluster.local:9000
-        labels:
-          namespace: 'infra'
 ```
 
-Then `make apply`. Three new targets, all green. Nine lines, four minutes — a perfectly reasonable thing to have written for three services.
+The two routers and the Redis exporter, by their Service hostnames. It is the same list superdemo's own Prometheus scrapes.
 
-Now look at what it costs.
+```bash
+make apply
+```
 
-**1. The job is called `prometheus` and does not scrape Prometheus.**
+Three new targets, all green. Now ask where each one runs:
 
 ```promql
-up{job="prometheus"}
+up{job="trading-app"}
 ```
 
-Four series: the real Prometheus, two routers, a Redis exporter. Every query from here on has to know that. Free to fix on day one, expensive on day four hundred, because by then it is in dashboards.
-
-**2. The namespace label is a lie.**
-
-```promql
-count by (namespace) (up)
+```
+up{instance="redis-service.infra.svc.cluster.local:9000", job="trading-app"}   1
+up{instance="router.trading-emea.svc.cluster.local:9000", job="trading-app"}   1
+up{instance="router.trading-na.svc.cluster.local:9000", job="trading-app"}     1
 ```
 
-All three of superdemo's targets say `infra` (Prometheus's own target has no namespace at all). But two of those three are in `trading-na` and `trading-emea`. The label is applied by hand to the whole list, nothing checks it, and anything grouping by namespace silently merges two regions into one.
+Two labels, `job` and `instance`. The only thing telling North America from EMEA is a hostname. There is no namespace, pod or service to group by.
 
-**This is the most important thing in the chapter.** A wrong label is worse than a missing one, because a missing one makes you go and look.
+## Why naming targets stops working
 
-**3. It does not scale.** Add a service, nothing happens until you edit this file. Move one and it breaks. Rename a namespace and you get a green target scraping the wrong thing.
+Three targets are fine. The trouble starts as the app grows:
+
+- **Every change is an edit to this file.** A new service is scraped only once someone adds it here, and a moved one breaks until someone notices.
+- **Named targets know only what you type.** Any label you want, a namespace or a region, you add by hand and keep correct by hand. Nothing checks it.
+
+Kubernetes already knows every pod, where it runs and what it is called. Prometheus can ask it.
 
 ---
 
-## Do it properly
+## Let Kubernetes tell Prometheus
 
-The workload declares; the platform discovers.
+The workload declares how to scrape it; Prometheus discovers it.
 
 ### Half one: the workload declares
 
-`superdemo/k8s/router.yaml` has no scrape annotation, and neither does the copy here — deliberately. Add it to `k8s/router.yaml`, under the pod template's `metadata:` (`spec.template.metadata`), next to its `labels:`:
+The router's pod template has no scrape annotation yet. Add one to `k8s/router.yaml`, under the pod template's `metadata:` (`spec.template.metadata`), next to its `labels:`:
 
 ```yaml
       annotations:
@@ -82,11 +66,11 @@ The workload declares; the platform discovers.
 ./build.sh -s router
 ```
 
-Two lines, and **a real PR you could open against superdemo**. The application team knows which port serves metrics; the platform team does not, and should not have to.
+Two lines, owned by the right team: the application team knows which port serves metrics, and whoever runs Prometheus does not have to.
 
-### Half two: the platform discovers
+### Half two: Prometheus discovers
 
-Take superdemo's targets back out of the `prometheus` job, leaving `localhost:9090`, and add this job below it:
+Delete the `trading-app` job, and add this one in its place:
 
 ```yaml
   - job_name: kubernetes-pods
@@ -124,6 +108,19 @@ Take superdemo's targets back out of the `prometheus` job, leaving `localhost:90
 ```bash
 make apply
 ```
+
+### What the rules do
+
+Discovery turns every pod in those namespaces into a candidate target, carrying `__meta_kubernetes_*` labels: its namespace, name and node, its labels and its annotations. Annotation names are made safe for Prometheus on the way, so `prometheus.io/scrape` arrives as `__meta_kubernetes_pod_annotation_prometheus_io_scrape`. Relabeling then runs top to bottom:
+
+| Rule | What it does |
+|---|---|
+| `keep` on the scrape annotation | drops every pod that has not opted in |
+| rewrite `__address__` | scrapes the port the annotation names |
+| `__metrics_path__` | honours a custom path if a pod sets one; `/metrics` otherwise |
+| the last four | copy discovery metadata into labels you can query: `namespace`, `pod`, `service`, `node` |
+
+Anything still starting with `__` is dropped once relabeling finishes. That is why the pod's other labels, `pod_template_hash` among them, never reach your series: you choose what becomes a label.
 
 ---
 
@@ -180,13 +177,13 @@ count by (namespace, service) (up)
 {namespace="trading-na",   service="router"}         1
 ```
 
-Each target labelled with the namespace it is *actually* in; the `{}` row is Prometheus scraping itself. For about five minutes `infra` reads 4 instead of 1: the hardcoded targets you removed, still showing their last scrape. And something you did not ask for:
+Each target labelled with the namespace it runs in; the `{}` row is Prometheus scraping itself. For a few minutes after the change the `{}` row reads 4: the named targets you deleted, still showing their last scrape. And something you did not ask for:
 
 ```promql
 redis_up
 ```
 
-The Redis exporter. You never named it or touched `utils/redis/redis.yml`. Its annotations have been sitting in superdemo since the file was written — correct, and unused, because superdemo scrapes by hostname. Your rules read them.
+The Redis exporter, from the `kubernetes-pods` job. Nothing in that job names it: `utils/redis/redis.yml` already carries the two annotations, so the same rules found it. For a few minutes you may also see a second row, the deleted `trading-app` job's last scrape.
 
 **That is the payoff, and it compounds:** chapters 04 and 05 add two more workloads and neither needs a line of scrape config.
 
@@ -200,7 +197,7 @@ labels.cluster |  labels.env   |labels.namespace|labels.service |      labels.po
 prometheus-101 |lab            |trading-na      |router         |router-c59f76fc6-k8rqx |na
 ```
 
-`cluster`/`env` from chapter 02's `external_labels`, `namespace`/`service`/`pod` from the rules you just wrote, `region` from the application. Your pod name will differ. superdemo sets no `external_labels`, so its first two are empty.
+`cluster`/`env` from chapter 02's `external_labels`, `namespace`/`service`/`pod` from the rules you just wrote, `region` from the application. Your pod name will differ.
 
 ---
 
@@ -212,11 +209,11 @@ make test
 
 | | |
 |---|---|
-| **Hardcoded targets** | fine at three, a maintenance job at thirty, silently wrong when something moves |
-| **A wrong label** | worse than a missing one — nothing will tell you |
-| **Annotation discovery** | a contract: the workload declares, the platform honours |
+| **Named targets** | fine at three, a maintenance job at thirty |
+| **Annotation discovery** | a contract: the workload declares, Prometheus discovers |
+| **Relabeling** | turns discovery metadata into the labels you query by |
 | **RBAC** | a ServiceAccount is identity; permission is separate |
 | **RE2** | no backreferences; a rule matching nothing looks like no rule |
 | **Target dedup** | identical label sets collapse into one target |
 
-Next: the exporter superdemo installs and never scrapes.
+Next: cluster state, from kube-state-metrics.

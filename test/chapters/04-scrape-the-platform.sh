@@ -1,4 +1,4 @@
-# Chapter 04: kube-state-metrics, which superdemo installs and never scrapes.
+# Chapter 04: kube-state-metrics, the cluster's state as metrics, in a job of its own.
 if ! kubectl -n kube-system get deploy kube-state-metrics >/dev/null 2>&1; then
   fail "kube-state-metrics is installed" "run: make ksm"
 else

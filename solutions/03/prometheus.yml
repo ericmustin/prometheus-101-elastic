@@ -10,9 +10,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-  # Stamped onto every series on the way OUT. superdemo sets none of these,
-  # which is why every series it ships is anonymous once it lands - you cannot
-  # tell one demo cluster's data from another's.
+  # Stamped onto every series on the way OUT. Without them every series is
+  # anonymous once it lands - you cannot tell one cluster's data from
+  # another's.
   external_labels:
     cluster: prometheus-101
     env: lab
@@ -33,8 +33,8 @@ remote_write:
 
     authorization:
       type: ApiKey
-      # superdemo inlines the key here as `credentials:`. This config becomes
-      # a ConfigMap, and a ConfigMap is plaintext to anyone with kubectl.
+      # Read from a file, so the key never appears in this config. This config
+      # becomes a ConfigMap, and a ConfigMap is plaintext to anyone with kubectl.
       credentials_file: /etc/elastic/api-key
 
     # The shock absorber. Tune it when the receiving system is slow or is
