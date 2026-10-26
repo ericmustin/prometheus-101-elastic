@@ -146,7 +146,7 @@ build.sh                    superdemo's deploy idiom; make wraps it
 scripts/                    setup, apply, chapter switching, assertions
 test/                       the grader
 docs/SUPERDEMO-MAP.md       what you built, and where it is in superdemo
-docs/images/                the cluster maps and diagrams the chapters use
+docs/images/                the cluster maps and diagrams the chapters use, and video stills
 ```
 
 ---
