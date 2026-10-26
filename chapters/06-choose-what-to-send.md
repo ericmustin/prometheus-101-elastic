@@ -8,6 +8,8 @@
 
 Prometheus scrapes itself, both routers, Redis, kube-state-metrics and the collector, and it sends everything it scrapes to Elastic. This chapter adds two filters, one at the scrape and one at remote write, and looks at the controls on the Elastic side.
 
+![Where you are, before chapter 06: Everything Prometheus scrapes is stored locally and sent to Elastic. This chapter: Filter at the scrape and at remote write, and see what Elastic offers.](../docs/images/topology-06-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -56,6 +58,8 @@ A useful question for each group of series is **who uses it, and for how long?**
 - **Nobody, anywhere:** don't collect it. Filter at the scrape.
 - **Only someone debugging this cluster right now:** keep it in Prometheus, and don't send it.
 - **Dashboards, alerts, investigations, trends:** send it, and let retention and downsampling in Elastic handle its age.
+
+![Chapter 06 on one page: ask who uses each group of series, and for how long. Filter at the scrape with metric_relabel_configs, at remote write with write_relabel_configs, and set retention and downsampling per data stream in Elastic. Regexes are anchored, check what else a pattern matches, and filtering changes only new data.](../docs/images/06-choose-what-to-send.png)
 
 Many teams start by sending everything and trim once they see what is used. Others start from an allow list. Either works, as long as the choice is deliberate and revisited.
 
@@ -153,6 +157,10 @@ Chapter 06's checks:
 The same rule gives two answers: in Prometheus, and not in Elastic. Filtering changes new data only. What already reached Elastic stays until the data stream's retention removes it.
 
 ---
+
+## What you collect now
+
+![What you collect after chapter 06: kube-state-metrics trimmed at the scrape. Runtime internals kept local. Now you can answer: What Prometheus keeps, what reaches Elastic, and why.](../docs/images/topology-06-after.png)
 
 ## In the field
 

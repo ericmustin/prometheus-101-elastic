@@ -8,6 +8,8 @@
 
 Prometheus collects the app, Redis and the cluster's state. Between apps and Elastic there is often an OpenTelemetry collector, and collectors report on their own health. This chapter deploys one and lets chapter 03's rules scrape it.
 
+![Where you are, before chapter 05: Many pipelines have a collector between the apps and Elastic. This chapter: Deploy an EDOT collector. Chapter 03's rules find it.](../docs/images/topology-05-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -123,6 +125,10 @@ make test
 
 Chapter 05's checks: the collector is deployed; it was found by the same annotation rules, with no config change; its `otelcol_*` metrics are being scraped, including accepted and sent points and its memory; and it is accepting data.
 
+## What you collect now
+
+![What you collect after chapter 05: The collector's own health, found by the same discovery rules. Now you can answer: Is the collector accepting and sending everything it receives?](../docs/images/topology-05-after.png)
+
 ## In the field
 
 - **In superdemo:** the EDOT collectors in `agents/apm/` run in three tiers, and each reports the same `otelcol_*` counters. There they go over OTLP to a gateway, not to a Prometheus endpoint.
@@ -130,6 +136,8 @@ Chapter 05's checks: the collector is deployed; it was found by the same annotat
 - **Good practice:** treat collectors as part of the pipeline you monitor: alert on refused and failed points, and on accepted minus sent staying above zero.
 
 ## What you now know
+
+![Chapter 05 on one page: deploy a collector and change no config; chapter 03's rules find it through its annotations and a pull reader on port 8889. Read its counters as a pipeline: accepted minus sent, and send_failed is absent, not zero, until a send first fails.](../docs/images/05-scrape-the-collector.png)
 
 | | |
 |---|---|

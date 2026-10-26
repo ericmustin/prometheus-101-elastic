@@ -2,6 +2,8 @@
 
 Read this when you move on to superdemo. The course uses superdemo's names, ports, namespaces and file layout on purpose, so most of what you find there will already look familiar. This page shows where each piece you built lives.
 
+![Where each chapter lives in superdemo: your first scrape job and remote write live in the prometheus.yml inside utils/prometheus-grafana/grafana.yaml; pod discovery annotations on the router in k8s/router.yaml and Redis in utils/redis/redis.yml; kube-state-metrics from utils/ksm/ksm.sh; the EDOT collectors in agents/apm/; filters under any scrape job or its remote_write; and the same two Grafana datasources and saved search.](images/00-maps-to-superdemo.png)
+
 ---
 
 ## The five files

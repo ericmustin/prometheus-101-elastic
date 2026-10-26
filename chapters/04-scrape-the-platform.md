@@ -8,6 +8,8 @@
 
 Prometheus discovers the routers and Redis, and their metrics reach Elastic with Kubernetes labels. Nothing yet describes the cluster itself: which pods are running, whether deployments have their replicas, whether anything is restarting. This chapter installs kube-state-metrics and gives it a job.
 
+![Where you are, before chapter 04: The app is collected. Nothing describes the cluster itself. This chapter: Install kube-state-metrics and give it a job of its own.](../docs/images/topology-04-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -140,6 +142,10 @@ make test
 
 Chapter 04's checks: kube-state-metrics is installed; its pod carries no scrape annotation, which is why it needs naming; the job has a healthy target; pod phase and deployment replicas are collected; it can count running pods; and cluster state reached Elastic alongside the application's metrics.
 
+## What you collect now
+
+![What you collect after chapter 04: Cluster state, from kube-state-metrics, next to the app's metrics. Now you can answer: Is anything restarting? Are deployments at their replica count?](../docs/images/topology-04-after.png)
+
 ## In the field
 
 - **In superdemo:** `utils/ksm/ksm.sh` installs kube-state-metrics, the same script you ran.
@@ -147,6 +153,8 @@ Chapter 04's checks: kube-state-metrics is installed; its pod carries no scrape 
 - **Good practice:** give an exporter with a different shape its own job, and know its series count before you size Prometheus or plan storage.
 
 ## What you now know
+
+![Chapter 04 on one page: the kube-state-metrics chart annotates its Service, not its pod, so chapter 03's job doesn't select it. A job of its own finds the pod by label and keeps port http. About 1,250 series on a 13-pod cluster: it scales with the cluster, not with your app.](../docs/images/04-scrape-the-platform.png)
 
 | | |
 |---|---|

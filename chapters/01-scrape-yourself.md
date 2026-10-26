@@ -8,6 +8,8 @@
 
 `make setup` left everything running and nothing collected: Prometheus runs with an empty scrape list. This chapter gives it its first target, itself.
 
+![Where you are, before chapter 01: Everything runs. Prometheus has an empty scrape list. This chapter: Give Prometheus its first target: itself.](../docs/images/topology-01-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -91,6 +93,10 @@ make test
 
 Chapter 01's checks: the job exists, the target is up, samples are landing. The third matters: a config can parse and a target can be listed without a single sample ever being stored.
 
+## What you collect now
+
+![What you collect after chapter 01: Prometheus scrapes itself and keeps about six hours on its disk. Now you can answer: Is Prometheus up, and what is it storing?](../docs/images/topology-01-after.png)
+
 ## In the field
 
 - **In superdemo:** its Prometheus config lives inside `utils/prometheus-grafana/grafana.yaml`, in the `prom-config` ConfigMap, and its Targets page is on port 9090, as here. When a demo shows no data, that page is the first place to look.
@@ -98,6 +104,8 @@ Chapter 01's checks: the job exists, the target is up, samples are landing. The 
 - **Tailor it:** anything that serves this text format can be a target: an app's client library, an exporter, a collector. `up` works the same for all of them, which makes it a good first alert.
 
 ## What you now know
+
+![Chapter 01 on one page: one job, one target. A wrong port leaves the target down although promtool accepts the config. The target serves plain text over HTTP, and up is written by Prometheus. Prometheus doesn't receive metrics, it goes and gets them.](../docs/images/01-scrape-yourself.png)
 
 | | |
 |---|---|

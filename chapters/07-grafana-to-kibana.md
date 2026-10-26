@@ -8,6 +8,8 @@
 
 Everything you collect reaches Elastic. Grafana, in `infra`, reads only the local Prometheus, which holds about six hours. This chapter adds Elastic as a second Grafana datasource and opens the same data in Kibana.
 
+![Where you are, before chapter 07: Everything reaches Elastic. Grafana reads only the local Prometheus. This chapter: Add Elastic as a second Grafana datasource.](../docs/images/topology-07-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -125,6 +127,10 @@ make test
 
 Chapter 07's checks: Grafana is deployed with two datasources, both `type: prometheus`; one points at Elasticsearch's `_prometheus` endpoint; and it answers a PromQL query through Grafana's proxy, the whole path a dashboard uses, not just that the config exists.
 
+## What you collect now
+
+![What you collect after chapter 07: Grafana and Kibana both read the same data from Elastic. Now you can answer: The same dashboards and PromQL, over as much history as you keep.](../docs/images/topology-07-after.png)
+
 ## In the field
 
 - **In superdemo:** Grafana has the same two datasources, and Kibana has the saved search you imported, with its PromQL tab. Those are the two places to show this chapter's outcome.
@@ -133,6 +139,8 @@ Chapter 07's checks: Grafana is deployed with two datasources, both `type: prome
 - **Keep the key in a Secret:** here, as in superdemo, the API key is written into Grafana's datasource ConfigMap, which is fine for a lab. In a customer's cluster, put it in a Secret, give it to Grafana as an environment variable, and reference that variable in `secureJsonData`: Grafana expands environment variables in provisioning files.
 
 ## What you now know
+
+![Chapter 07 on one page: Grafana keeps its dashboards and queries and gains a second Prometheus datasource that points at Elasticsearch's _prometheus API. Kibana reads the same data. Exemplars don't carry over, so test a customer's dashboards against the new datasource.](../docs/images/07-grafana-to-elastic.png)
 
 | | |
 |---|---|

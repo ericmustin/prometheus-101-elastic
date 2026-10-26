@@ -8,6 +8,8 @@
 
 Prometheus scrapes itself and keeps about six hours of history on its own disk. Your Elastic project has none of it. This chapter adds remote write, so every sample is also sent to Elastic.
 
+![Where you are, before chapter 02: Prometheus collects its own metrics. Elastic has none of them. This chapter: Add remote write, so every sample also goes to Elastic.](../docs/images/topology-02-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -206,6 +208,10 @@ make test
 
 Chapter 02's checks: the running config has a `remote_write` block, the key is read from a file, remote write is delivering by both measures, data is queryable in your data stream, and documents carry `labels.cluster` from `external_labels`.
 
+## What you collect now
+
+![What you collect after chapter 02: Every sample Prometheus scrapes is also sent to Elastic. Now you can answer: The same metrics, in Kibana, labelled with the cluster they came from.](../docs/images/topology-02-after.png)
+
 ## In the field
 
 - **In superdemo:** its Prometheus remote-writes to the same `_prometheus/api/v1/write` URL, into `metrics-generic.prometheus-default`, so the queries you ran here work against a running superdemo.
@@ -213,6 +219,8 @@ Chapter 02's checks: the running config has a `remote_write` block, the key is r
 - **Good practice:** label each cluster with `external_labels`, route clusters or teams to their own data streams (the `/_prometheus/metrics/<dataset>/<namespace>` path here, or the `data_stream_dataset` and `data_stream_namespace` labels through the managed endpoint), keep the API key in a Secret, and watch remote write with both the failure and the lag signals.
 
 ## What you now know
+
+![Chapter 02 on one page: remote write sends every sample to Elastic. With no credentials, Elastic answers 401 and samples_failed_total climbs. With a missing key file, sends are retried and samples_retried_total climbs while samples_failed_total stays at 0. No single counter proves delivery: check the destination.](../docs/images/02-remote-write.png)
 
 | | |
 |---|---|

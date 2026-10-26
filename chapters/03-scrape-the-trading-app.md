@@ -8,6 +8,8 @@
 
 Prometheus scrapes itself and sends its own metrics to Elastic. The trading app's routers and the Redis exporter serve metrics that nothing collects yet. This chapter collects them, first by naming them, then by letting Kubernetes tell Prometheus where they are.
 
+![Where you are, before chapter 03: The routers and Redis serve metrics. Nothing collects them yet. This chapter: Scrape the routers and Redis, then let Kubernetes tell Prometheus where they are.](../docs/images/topology-03-before.png)
+
 Grade it before you start:
 
 ```bash
@@ -225,6 +227,10 @@ make test
 
 Chapter 03's checks: one healthy router per region, found by discovery and labelled with its own namespace; Redis found by the same rules; the `trading-app` job gone, so nothing is scraped twice; Prometheus allowed to list pods; only the labels you chose, so no `pod_template_hash`; and the Kubernetes labels arriving in Elastic.
 
+## What you collect now
+
+![What you collect after chapter 03: Both routers and Redis, found by discovery and labelled by namespace and service. Now you can answer: Requests and trades, by region, namespace and service.](../docs/images/topology-03-after.png)
+
 ## In the field
 
 - **In superdemo:** its Prometheus names its three targets, the way this chapter starts. Discovery is how that setup grows: annotate a workload, and the same rules find it.
@@ -232,6 +238,8 @@ Chapter 03's checks: one healthy router per region, found by discovery and label
 - **Good practice:** labels become dimensions in Elastic (`labels.namespace`, `labels.service`), so choose them on purpose: enough to group and filter by, without per-request values that multiply series.
 
 ## What you now know
+
+![Chapter 03 on one page: targets named by hand carry only job and instance. With discovery, pods declare scrape annotations and the kubernetes-pods job finds both routers and Redis, labelled by namespace, pod, service and node. Watch for RBAC and for RE2's missing backreferences. The workload declares, Prometheus discovers.](../docs/images/03-discover-the-app.png)
 
 | | |
 |---|---|

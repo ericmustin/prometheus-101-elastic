@@ -25,9 +25,16 @@ for tool in docker kubectl k3d jq curl; do
 done
 
 if [[ "${fatal}" -ne 0 ]]; then
-  log_hint "macOS:  brew install k3d kubectl jq   (Docker Desktop for docker)"
+  log_hint "macOS:  brew install k3d kubectl jq helm   (Docker Desktop for docker)"
   log_hint "Linux:  https://k3d.io/#installation"
   exit 1
+fi
+
+# Only chapter 04 needs helm: make ksm installs kube-state-metrics from its chart.
+if command -v helm >/dev/null 2>&1; then
+  log_ok "helm is on PATH ($(command -v helm))."
+else
+  log_warn "helm is not installed (needed from chapter 04, for make ksm). macOS: brew install helm"
 fi
 
 if docker info >/dev/null 2>&1; then

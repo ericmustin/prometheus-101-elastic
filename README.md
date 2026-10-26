@@ -20,10 +20,11 @@ The app and its layout come from superdemo: its `router` service, namespaces, po
 
 ## Get started
 
-You need macOS or Linux, `docker`, `k3d`, `kubectl`, `jq`, `curl`, `git`, `make`, and an **Elastic Serverless** project. Roughly 3 GB of RAM for the cluster.
+You need macOS or Linux, `docker`, `k3d`, `kubectl`, `jq`, `curl`, `git`, `make`, `helm` (chapter 04 installs kube-state-metrics from its chart), and an **Elastic Serverless** project. Roughly 3 GB of RAM for the cluster.
 
 ```bash
 brew install k3d kubectl jq          # macOS; Docker Desktop for docker
+brew install helm                    # chapter 04 installs kube-state-metrics with it
 ```
 
 ```bash
@@ -56,6 +57,8 @@ git clone https://github.com/ty-elastic/superdemo ../superdemo
 ## Where you start
 
 In the middle of the story. `make setup` builds superdemo's trading app the way you would find it on your first day: a `router` in each of two regions with a traffic generator hitting it, Redis with its exporter, and a Prometheus and a Grafana in `infra`.
+
+![Where you start: superdemo's trading app is running in a k3d cluster, with a router in two regions, Redis, Grafana and a Prometheus whose scrape list is empty. Nothing is collecting its metrics yet, and Elastic holds none of your data.](docs/images/topology-00.png)
 
 ```bash
 kubectl get pods -A | grep -v kube-system
@@ -109,7 +112,7 @@ There are no branches. Editing `prometheus/prometheus.yml` and running `make cha
 | 06 | Choose what to send | filtering at the scrape vs at remote write, retention in Elastic | anchored regexes match nothing, silently |
 | 07 | Grafana → Elastic | one datasource swap, dashboards unchanged | the API is a subset; exemplars do not port |
 
-Each chapter starts with **Where you are**, what is collected so far and what the chapter adds, and a `make test` run that shows its checks failing. It ends with **In the field**: where the piece lives in superdemo, what customers ask about it, and how to adapt it.
+Each chapter starts with **Where you are**: a map of the cluster showing what is collected so far and what the chapter adds, and a `make test` run that shows its checks failing. Once the checks pass, **What you collect now** shows the same map with the chapter's work in place. Then **In the field**: where the piece lives in superdemo, what customers ask about it, and how to adapt it.
 
 You mostly edit `prometheus/prometheus.yml`. Chapter 03 also edits `k8s/router.yaml`; chapters 05 and 07 change no file at all, and in both cases that is the lesson.
 
@@ -143,6 +146,7 @@ build.sh                    superdemo's deploy idiom; make wraps it
 scripts/                    setup, apply, chapter switching, assertions
 test/                       the grader
 docs/SUPERDEMO-MAP.md       what you built, and where it is in superdemo
+docs/images/                the cluster maps and diagrams the chapters use
 ```
 
 ---
