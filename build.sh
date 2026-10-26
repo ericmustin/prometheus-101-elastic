@@ -184,9 +184,12 @@ if [[ "${grafana}" == "true" || "${grafana}" == "elastic" ]]; then
   if [[ -n "${before}" && "${before}" != "$(kubectl -n infra get configmap grafana-datasources -o jsonpath='{.data}')" ]]; then
     kubectl -n infra rollout restart deployment/grafana >/dev/null
   fi
-  retry_command kubectl -n infra rollout status deployment/prometheus --timeout=180s >/dev/null
+  # A first image pull can take minutes on a slow network, hence the long timeout.
+  # "|| exit 1" is what lets retry_command retry: under set -e, a bare call exits
+  # on the first failed attempt.
+  retry_command kubectl -n infra rollout status deployment/prometheus --timeout=600s >/dev/null || exit 1
   log_ok "prometheus"
-  retry_command kubectl -n infra rollout status deployment/grafana --timeout=180s >/dev/null
+  retry_command kubectl -n infra rollout status deployment/grafana --timeout=600s >/dev/null || exit 1
   if [[ "${grafana}" == "elastic" ]]; then log_ok "grafana (datasources: Prometheus, Elastic)"; else log_ok "grafana (datasource: Prometheus)"; fi
 fi
 
@@ -194,7 +197,7 @@ fi
 if [[ "${deploy_otel}" != "false" ]]; then
   log_step "EDOT collector (agents/apm/${deploy_otel}.yaml)"
   kubectl apply -f "${ROOT_DIR}/agents/apm/${deploy_otel}.yaml" >/dev/null
-  retry_command kubectl -n infra rollout status deployment/otel-collector --timeout=240s >/dev/null
+  retry_command kubectl -n infra rollout status deployment/otel-collector --timeout=600s >/dev/null || exit 1
   log_ok "otel-collector"
 fi
 
