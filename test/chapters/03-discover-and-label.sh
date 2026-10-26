@@ -53,11 +53,11 @@ assert_ge "$(prom_count 'redis_up')" 1 \
 # there ARE labels to look at before asserting what is not among them.
 labels="$(prom_target_labels kubernetes-pods)"
 if [[ -z "${labels}" ]]; then
-  fail "pod_template_hash was NOT imported onto the series" \
+  fail "pod_template_hash was not imported onto the series" \
     "the kubernetes-pods job has no targets, so there is nothing to check"
 else
   assert_not_contains "${labels}" 'pod_template_hash' \
-    "pod_template_hash was NOT imported onto the series"
+    "pod_template_hash was not imported onto the series"
 fi
 
 # The router's own metric names, in Prometheus.

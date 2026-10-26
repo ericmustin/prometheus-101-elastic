@@ -27,7 +27,7 @@ superdemo's Prometheus surface is five files, and you have worked with the equiv
 | 03 | pod discovery and scrape annotations | the router in `k8s/router.yaml`, Redis in `utils/redis/redis.yml` |
 | 04 | a kube-state-metrics job | `utils/ksm/ksm.sh` installs it |
 | 05 | a collector's own metrics | the EDOT collectors in `agents/apm/` |
-| 06 | an allow list and a drop list | any job, once there are enough targets to need them |
+| 06 | filtering at the scrape and at remote write | any scrape job, and the `remote_write` block |
 | 07 | Elastic as a Grafana datasource | the same two datasources, and the saved search in `assets/objects/metrics_esql.ndjson` |
 
 superdemo's Prometheus names its three targets directly, the way chapter 03 starts. Discovery, relabeling and filtering are what you add as an environment grows.
@@ -53,7 +53,7 @@ So that nothing surprises you when you open the real thing:
 
 The remote write URL is worth dwelling on. superdemo uses the form with **no routing segments**, which lands everything in `metrics-generic.prometheus-default`. That is why superdemo's own saved search reads from exactly that name, and why the course writes there too — import `assets/objects/metrics_esql.ndjson` from superdemo unmodified and it works against your data.
 
-It is also the thing to change first when a second cluster writes into the same project. "Generic" is a fine name for one cluster and a useless one for the second, and the explicit `/_prometheus/<type>/<dataset>/<namespace>/api/v1/write` form is how you separate them. Chapter 02 shows both.
+It is also the thing to change first when a second cluster writes into the same project. "Generic" works for one cluster; with a second, the explicit `/_prometheus/metrics/<dataset>/<namespace>/api/v1/write` form separates them (or the `data_stream_dataset` and `data_stream_namespace` labels, through Elastic's managed remote write endpoint), and lets each data stream have its own retention. Chapter 02 shows both.
 
 ---
 

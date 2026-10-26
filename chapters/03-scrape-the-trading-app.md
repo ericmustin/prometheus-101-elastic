@@ -4,6 +4,20 @@
 
 ---
 
+## Where you are
+
+Prometheus scrapes itself and sends its own metrics to Elastic. The trading app's routers and the Redis exporter serve metrics that nothing collects yet. This chapter collects them, first by naming them, then by letting Kubernetes tell Prometheus where they are.
+
+Grade it before you start:
+
+```bash
+make test
+```
+
+Chapters 01 and 02 pass. Chapter 03's checks fail: no router is discovered yet, and nothing carries Kubernetes labels. Some checks wait a few minutes before they give up.
+
+---
+
 ## Start by naming the targets
 
 The quickest way to scrape something is to list it. Add a second job to `prometheus/prometheus.yml`, below `prometheus`:
@@ -124,9 +138,9 @@ Anything still starting with `__` is dropped once relabeling finishes. That is w
 
 ---
 
-## The failure you will hit first
+## Discovery needs permission
 
-No targets. Not red — absent.
+No targets. Not red: absent. Discovery asks the Kubernetes API for pods, and Prometheus logs why it can't:
 
 ```bash
 make logs | grep -i forbidden
@@ -137,15 +151,15 @@ pods is forbidden: User "system:serviceaccount:infra:prometheus"
 cannot list resource "pods" in API group "" in the namespace "trading-na"
 ```
 
-A ServiceAccount is an identity. Nobody granted that identity anything.
+Prometheus runs as a ServiceAccount, and nothing has granted that account permission to list pods yet. The workshop's RBAC file grants it read access to pods, services, endpoints and nodes:
 
 ```bash
 kubectl apply -f utils/prometheus-grafana/rbac.yml
 ```
 
-Targets appear within half a minute, no restart — Prometheus was already retrying. Every engineer hits this exactly once.
+Targets appear within half a minute, no restart: Prometheus was already retrying. This is a common first error with Kubernetes discovery, and in a customer cluster the fix is the same ClusterRole and binding, or the one their Helm chart creates.
 
-## The trap that costs an afternoon
+## No backreferences
 
 `role: pod` produces one candidate per **declared container port**, so a pod declaring two gives you two targets for one workload. The obvious fix is to keep the candidate whose port matches the annotation:
 
@@ -153,14 +167,16 @@ Targets appear within half a minute, no restart — Prometheus was already retry
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port,
                         __meta_kubernetes_pod_container_port_number]
         action: keep
-        regex: (\d+);\1          # never matches
+        regex: (\d+);\1          # rejected
 ```
 
-**Prometheus regexes are RE2, which has no backreferences.** `\1` is not an error — it simply never matches, so the rule keeps nothing and you get an empty Targets page from a config `promtool` calls perfect.
+**Prometheus regexes are RE2, which has no backreferences.** `make apply` stops at `promtool`, and nothing reaches the cluster:
 
-Rule 2 above sidesteps it: rewriting `__address__` from the annotation makes every candidate for a pod **identical**, and Prometheus deduplicates identical targets.
+```
+error parsing regexp: invalid escape sequence: `\1`
+```
 
-Carry this with you: **a relabel rule that matches zero things looks exactly like a rule that is not there.**
+Rule 2 above sidesteps it: rewriting `__address__` from the annotation makes every candidate for a pod **identical**, and Prometheus deduplicates identical targets. When a relabel rule seems to need a backreference, look for a rewrite that makes the values equal instead.
 
 ---
 
@@ -185,7 +201,7 @@ redis_up
 
 The Redis exporter, from the `kubernetes-pods` job. Nothing in that job names it: `utils/redis/redis.yml` already carries the two annotations, so the same rules found it. For a few minutes you may also see a second row, the deleted `trading-app` job's last scrape.
 
-**That is the payoff, and it compounds:** chapters 04 and 05 add two more workloads and neither needs a line of scrape config.
+**This is what discovery buys you:** chapter 05's collector is found the same way, with no new scrape config. Chapter 04 shows the exception.
 
 ```bash
 make esql Q=queries/esql/06-identity.esql
@@ -207,13 +223,23 @@ prometheus-101 |lab            |trading-na      |router         |router-c59f76fc
 make test
 ```
 
+Chapter 03's checks: one healthy router per region, found by discovery and labelled with its own namespace; Redis found by the same rules; the `trading-app` job gone, so nothing is scraped twice; Prometheus allowed to list pods; only the labels you chose, so no `pod_template_hash`; and the Kubernetes labels arriving in Elastic.
+
+## In the field
+
+- **In superdemo:** its Prometheus names its three targets, the way this chapter starts. Discovery is how that setup grows: annotate a workload, and the same rules find it.
+- **What customers ask:** "How does Prometheus find our services?" Ask how they do it today. Many Kubernetes customers run the Prometheus Operator, whose ServiceMonitor and PodMonitor resources do the job these annotations do here; others use annotations like these, or static lists.
+- **Good practice:** labels become dimensions in Elastic (`labels.namespace`, `labels.service`), so choose them on purpose: enough to group and filter by, without per-request values that multiply series.
+
+## What you now know
+
 | | |
 |---|---|
 | **Named targets** | fine at three, a maintenance job at thirty |
 | **Annotation discovery** | a contract: the workload declares, Prometheus discovers |
 | **Relabeling** | turns discovery metadata into the labels you query by |
 | **RBAC** | a ServiceAccount is identity; permission is separate |
-| **RE2** | no backreferences; a rule matching nothing looks like no rule |
+| **RE2** | no backreferences: `promtool` rejects `\1`; rewrite `__address__` instead |
 | **Target dedup** | identical label sets collapse into one target |
 
 Next: cluster state, from kube-state-metrics.

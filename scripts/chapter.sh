@@ -151,7 +151,7 @@ show_answer() {
     case "${n}" in
       05) log_hint "The collector is found by the rules you wrote in chapter 03."
           log_hint "Deploy it and it appears:  make collector" ;;
-      07) log_hint "Grafana's two datasources are provisioned by build.sh:  make grafana" ;;
+      07) log_hint "Grafana's Elastic datasource is provisioned by build.sh:  make grafana" ;;
     esac
   fi
 }

@@ -9,7 +9,8 @@
 #   ./build.sh -1 true -b true -s all     # everything (what `make setup` runs)
 #   ./build.sh -s router                  # redeploy one service
 #   ./build.sh -r na -s all               # one region only, for a small laptop
-#   ./build.sh -g true                    # Prometheus + Grafana
+#   ./build.sh -g true                    # Prometheus + Grafana (local datasource only)
+#   ./build.sh -g elastic                 # ...plus the Elastic datasource (chapter 07)
 #   ./build.sh -o local                   # the EDOT collector
 #
 # Flag letters follow superdemo:
@@ -155,7 +156,7 @@ if [[ "${service}" != "none" ]]; then
 fi
 
 # ------------------------------------------------------ prometheus/grafana
-if [[ "${grafana}" == "true" ]]; then
+if [[ "${grafana}" == "true" || "${grafana}" == "elastic" ]]; then
   log_step "Prometheus + Grafana (ns infra)"
   kubectl create namespace infra --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   # Only the identity the Deployment runs as. What that identity may list is
@@ -172,12 +173,21 @@ if [[ "${grafana}" == "true" ]]; then
     --from-file=prometheus.yml="${TMP_DIR}/prometheus.seed.yml" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
+  # Grafana starts with only the local Prometheus as a datasource. The Elastic
+  # one is chapter 07's change, so it is left out unless asked for.
+  keep_elastic=(cat)
+  [[ "${grafana}" == "elastic" ]] || keep_elastic=(sed '/# >>> chapter 07/,/# <<< chapter 07/d')
+  before="$(kubectl -n infra get configmap grafana-datasources -o jsonpath='{.data}' 2>/dev/null || true)"
   envsubst '$ELASTIC_ES_URL,$DATA_STREAM,$ELASTIC_API_KEY' \
-    < "${ROOT_DIR}/utils/prometheus-grafana/grafana.yaml" | kubectl apply -f - >/dev/null
+    < "${ROOT_DIR}/utils/prometheus-grafana/grafana.yaml" | "${keep_elastic[@]}" | kubectl apply -f - >/dev/null
+  # Grafana reads provisioned datasources only when it starts.
+  if [[ -n "${before}" && "${before}" != "$(kubectl -n infra get configmap grafana-datasources -o jsonpath='{.data}')" ]]; then
+    kubectl -n infra rollout restart deployment/grafana >/dev/null
+  fi
   retry_command kubectl -n infra rollout status deployment/prometheus --timeout=180s >/dev/null
   log_ok "prometheus"
   retry_command kubectl -n infra rollout status deployment/grafana --timeout=180s >/dev/null
-  log_ok "grafana"
+  if [[ "${grafana}" == "elastic" ]]; then log_ok "grafana (datasources: Prometheus, Elastic)"; else log_ok "grafana (datasource: Prometheus)"; fi
 fi
 
 # ------------------------------------------------------------- collector

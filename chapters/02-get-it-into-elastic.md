@@ -4,9 +4,23 @@
 
 ---
 
+## Where you are
+
+Prometheus scrapes itself and keeps about six hours of history on its own disk. Your Elastic project has none of it. This chapter adds remote write, so every sample is also sent to Elastic.
+
+Grade it before you start:
+
+```bash
+make test
+```
+
+Chapter 01 passes. Chapter 02's checks fail: there is no `remote_write` block, so nothing is delivered and nothing has landed. The delivery check waits a few minutes before it gives up.
+
+---
+
 ## Why now
 
-A single Prometheus keeps 6 hours on one disk, cannot be queried across clusters, and holds metrics apart from logs and traces. **Remote write** streams every sample to an HTTP endpoint alongside the local disk. Nothing about scraping changes.
+This lab's Prometheus keeps 6 hours on one disk (the default is 15 days), cannot be queried across clusters, and holds metrics apart from logs and traces. **Remote write** streams every sample to an HTTP endpoint alongside the local disk. Nothing about scraping changes.
 
 Elasticsearch speaks the protocol natively — no collector, no agent, no conversion:
 
@@ -14,14 +28,16 @@ Elasticsearch speaks the protocol natively — no collector, no agent, no conver
 https://<your-elasticsearch>/_prometheus/api/v1/write
 ```
 
+> **For production on Serverless or Elastic Cloud Hosted**, Elastic recommends its managed Prometheus remote write endpoint (a managed input) over writing to Elasticsearch directly. This course writes to Elasticsearch's `_prometheus` endpoint, as superdemo does. Through the managed endpoint you route with the `data_stream_dataset` and `data_stream_namespace` labels rather than the URL path, and a success response means accepted for processing, not yet indexed.
+
 superdemo's URL, with **no routing segments** — it lands in `metrics-generic.prometheus-default`, which is why superdemo's Grafana datasource and saved search work against your data unmodified. The path can also route explicitly:
 
 ```
-/_prometheus/<type>/<dataset>/<namespace>/api/v1/write
-  -> <type>-<dataset>.prometheus-<namespace>
+/_prometheus/metrics/<dataset>/<namespace>/api/v1/write
+  -> metrics-<dataset>.prometheus-<namespace>
 ```
 
-`generic` is a fine name for one cluster and a useless one for the second. Yours:
+`generic` works well for one cluster. With a second, route each cluster to its own data stream, so you can tell them apart and set retention separately. Yours:
 
 ```bash
 make check | grep "Data stream"
@@ -51,7 +67,7 @@ The Targets page stays green: remote write is a **separate pipeline** with separ
 prometheus_remote_storage_samples_failed_total
 ```
 
-**Climbing** — an honest failure. Elasticsearch returns 401, Prometheus calls that **non-recoverable**, gives up on the batch and counts it.
+**Climbing**: a failure this counter shows. Elasticsearch returns 401, which Prometheus treats as **non-recoverable**: it drops the batch and counts it.
 
 Now the part worth slowing down for:
 
@@ -76,7 +92,7 @@ prometheus_remote_storage_samples_failed_total    # 0
 prometheus_remote_storage_samples_retried_total   # 11,860 and climbing
 ```
 
-**Zero failures, nothing ever delivered.** This error is *retryable*, and a retryable error never increments `samples_failed_total`.
+**Zero failures, nothing delivered.** Prometheus treats this error as *retryable*, and a retried sample is not counted in `samples_failed_total`.
 
 > Measured on this stack: with the credentials file absent, `samples_failed_total` stayed at **0 through 150,573 retries**.
 
@@ -87,11 +103,11 @@ Both measured here, not quoted from documentation:
 | | **401** (no auth) | **credentials file missing** |
 |---|---|---|
 | Prometheus calls it | non-recoverable | retryable |
-| `..._samples_failed_total` | 2,512 | **0** ← lies |
+| `..._samples_failed_total` | 2,512 | **0** ← looks healthy |
 | `..._samples_retried_total` | 0 | 11,860 |
-| `..._queue_highest_sent_timestamp_seconds` | **advancing** ← lies | 0 |
+| `..._queue_highest_sent_timestamp_seconds` | **advancing** ← looks healthy | 0 |
 
-**No single counter means "remote write is working."** Watch failures and you miss the retry loop; watch time-since-last-send and you miss outright rejection. The grader asks both. The only thing that never lies is the destination.
+**No single counter means "remote write is working."** Watch failures and you miss the retry loop; watch time-since-last-send and you miss outright rejection. The grader asks both, then checks the destination: data arriving in Elastic is the most direct evidence.
 
 ---
 
@@ -140,13 +156,13 @@ make apply
 VersionConflictEngineException: version conflict, document already exists
 ```
 
-If it does, it is one-time. Elasticsearch stores remote write in a **time series data stream**, which deduplicates, so a retried batch that re-sends samples that already landed is rejected. A clean first run often shows nothing at all.
+If it does, it is one-time. Elasticsearch stores remote write in a **time series data stream**, which deduplicates, so a retried batch that re-sends samples that already landed is rejected. A clean first run often shows nothing at all, and newer Elasticsearch releases drop duplicates silently instead of returning an error.
 
 ```promql
 rate(prometheus_remote_storage_samples_failed_total[2m])
 ```
 
-Back to zero and stays there. **Alert on the rate, not the total**: a cumulative counter never returns to zero once it has ticked.
+Back to zero and stays there. **Alert on the rate, not the total**: the total stays raised after a burst (until the next restart resets it), while the rate returns to zero.
 
 ---
 
@@ -178,7 +194,7 @@ make esql Q=queries/esql/02-metrics-info.esql
 
 **Values go under `metrics.`, labels under `labels.`**, and Elasticsearch infers metric type from the name suffix — `_total`, `_sum`, `_count`, `_bucket` mean counter, everything else gauge. The naming convention is not style; a downstream system reads it.
 
-That shape belongs to *the path*, not the app: the same metrics over OTLP would be `metrics.shares.traded` and `attributes.symbol`. Which is why "we support Prometheus" needs a follow-up — which Prometheus? A scrape source, a collector input, a wire protocol, a field shape, or a query language.
+That shape belongs to *the path*, not the app: the same counter sent over OTLP lands in the OpenTelemetry field model instead, with its label under `attributes.symbol`. Which is why "we support Prometheus" needs a follow-up — which Prometheus? A scrape source, a collector input, a wire protocol, a field shape, or a query language.
 
 ---
 
@@ -188,16 +204,24 @@ That shape belongs to *the path*, not the app: the same metrics over OTLP would 
 make test
 ```
 
+Chapter 02's checks: the running config has a `remote_write` block, the key is read from a file, remote write is delivering by both measures, data is queryable in your data stream, and documents carry `labels.cluster` from `external_labels`.
+
+## In the field
+
+- **In superdemo:** its Prometheus remote-writes to the same `_prometheus/api/v1/write` URL, into `metrics-generic.prometheus-default`, so the queries you ran here work against a running superdemo.
+- **What customers ask:** "Do we have to replace Prometheus?" No. Remote write adds a destination: local scraping, rules and alerts keep working, and Elastic adds longer retention, queries across clusters, and metrics next to logs and traces.
+- **Good practice:** label each cluster with `external_labels`, route clusters or teams to their own data streams (the `/_prometheus/metrics/<dataset>/<namespace>` path here, or the `data_stream_dataset` and `data_stream_namespace` labels through the managed endpoint), keep the API key in a Secret, and watch remote write with both the failure and the lag signals.
+
 ## What you now know
 
 | | |
 |---|---|
 | **Remote write** | a second, asynchronous pipeline with its own failure modes |
-| **`_prometheus/<type>/<dataset>/<namespace>`** | path routing → data stream name |
+| **`_prometheus/metrics/<dataset>/<namespace>`** | path routing → data stream name |
 | **`credentials_file`** | keys come from Secrets; ConfigMaps are plaintext |
 | **`external_labels`** | stamped on the way out; how you tell clusters apart |
-| **The self-metrics** | two failure modes, each hiding from the other's counter |
-| **WAL replay** | one-time conflict burst on enable; alert on rate, not total |
+| **The self-metrics** | two failure modes, each in a different counter |
+| **A conflict burst** | possible once, from a retried batch; alert on rate, not total |
 | **`metrics.` / `labels.`** | the Prometheus field shape in Elasticsearch |
 
-Next: give it something worth looking at.
+Next: scrape the trading app, and let Kubernetes tell Prometheus where it is.

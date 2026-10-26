@@ -28,7 +28,7 @@ help:
 	@echo
 	@echo "  make ksm            chapter 04: install kube-state-metrics"
 	@echo "  make collector      chapter 05: deploy the EDOT collector"
-	@echo "  make grafana        chapter 07: (re)deploy Prometheus + Grafana"
+	@echo "  make grafana        chapter 07: add Grafana's Elastic datasource"
 	@echo "  make links          chapter 02+: every course query, ready to paste in Kibana"
 	@echo "  make import         chapter 07: import superdemo's saved search"
 	@echo
@@ -47,7 +47,7 @@ chapter:    ; @scripts/chapter.sh $(CHAPTER_ARG)
 
 ksm:        ; @utils/ksm/ksm.sh
 collector:  ; @./build.sh -o local
-grafana:    ; @./build.sh -g true
+grafana:    ; @./build.sh -g elastic
 links:      ; @scripts/kibana.sh links
 import:     ; @scripts/kibana.sh import
 

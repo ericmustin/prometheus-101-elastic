@@ -2,13 +2,15 @@
 
 A hands-on Prometheus workshop, and an on-ramp to [**superdemo**](https://github.com/ty-elastic/superdemo).
 
+superdemo shows what Prometheus metrics in Elastic can do. This workshop builds the same pieces by hand, one chapter at a time, so you understand each one well enough to explain it to a customer, answer the technical follow-up questions, and change the setup to fit their environment.
+
 You start with a Prometheus config that does nothing:
 
 ```yaml
 scrape_configs: []
 ```
 
-Seven chapters later you have superdemo's trading app, its Redis exporter, kube-state-metrics and an EDOT collector all discovered automatically, their metrics in Elastic Serverless via remote write, the expensive ones filtered out, and Grafana pointed at Elastic with its dashboards unchanged.
+Seven chapters later you have superdemo's trading app, its Redis exporter, kube-state-metrics and an EDOT collector all discovered automatically, their metrics in Elastic Serverless via remote write, filtered at the scrape and at remote write, and Grafana pointed at Elastic with its dashboards unchanged.
 
 The app and its layout come from superdemo: its `router` service, namespaces, ports, `build.sh` idiom, remote write endpoint and data stream. So when you open superdemo afterwards, its Prometheus setup will look familiar.
 
@@ -100,12 +102,14 @@ There are no branches. Editing `prometheus/prometheus.yml` and running `make cha
 | | Chapter | You learn | You break |
 |---|---|---|---|
 | 01 | Scrape yourself | targets, jobs, `up`, the exposition format | wrong port → target down |
-| 02 | **Get it into Elastic** | remote write, `external_labels` | two failure modes, each hiding from the other's metric |
+| 02 | **Get it into Elastic** | remote write, `external_labels` | two failure modes, each in a different counter |
 | 03 | Scrape the trading app | static targets, Kubernetes discovery, relabeling | RBAC first, then RE2 has no backreferences |
 | 04 | Scrape the platform | kube-state-metrics, exporters, jobs as grouping | the chart annotates the Service, not the pod |
-| 05 | Scrape the collector | `otelcol_*`, pull vs periodic readers | a counter that never counted is absent, not zero |
-| 06 | Decide what you pay for | allow lists vs drop lists, and where each belongs | anchored regexes match nothing, silently |
+| 05 | Scrape the collector | `otelcol_*`, pull vs periodic readers | `send_failed` is absent, not zero, until a send fails |
+| 06 | Choose what to send | filtering at the scrape vs at remote write, retention in Elastic | anchored regexes match nothing, silently |
 | 07 | Grafana → Elastic | one datasource swap, dashboards unchanged | the API is a subset; exemplars do not port |
+
+Each chapter starts with **Where you are**, what is collected so far and what the chapter adds, and a `make test` run that shows its checks failing. It ends with **In the field**: where the piece lives in superdemo, what customers ask about it, and how to adapt it.
 
 You mostly edit `prometheus/prometheus.yml`. Chapter 03 also edits `k8s/router.yaml`; chapters 05 and 07 change no file at all, and in both cases that is the lesson.
 

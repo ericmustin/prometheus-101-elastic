@@ -124,8 +124,10 @@ wait_for_count_le() {
 # superdemo retarget: with the credentials file missing, that counter stayed
 # at 0 through 150,573 retries, because a retryable error never increments it.
 # The signals that move are samples_retried_total and, most directly,
-# queue_highest_sent_timestamp_seconds - the wall-clock of the last successful
-# send. `time() - that` is the alert you actually want in production.
+# queue_highest_sent_timestamp_seconds - the newest sample timestamp sent.
+# It also advances when a batch is rejected (chapter 02's 401 case), so pair it
+# with the failure counter: `time() - that` plus the failure rate is the alert
+# to run in production.
 remote_write_lag_seconds() {
   prom_count_scalar 'time() - max(prometheus_remote_storage_queue_highest_sent_timestamp_seconds)'
 }
@@ -164,9 +166,10 @@ remote_write_diagnosis() {
 #                                  no auth block   credentials_file missing
 #   Elasticsearch says             401             (request never completes)
 #   Prometheus classifies it       non-recoverable retryable
-#   samples_failed_total           2512            0          <- lies
+#   samples_failed_total           2512            0          <- looks healthy
 #   samples_retried_total          0               11860
-#   queue_highest_sent_timestamp   advancing <-lies 0
+#   queue_highest_sent_timestamp   advancing       0
+#                                  ^ looks healthy
 #
 # Checking the timestamp alone passes with 100% of samples being rejected.
 # Checking failures alone passes with nothing ever sent. Ask both.
@@ -177,9 +180,8 @@ remote_write_delivering() {
 
   local bad
   bad="$(prom_count_scalar 'sum(rate(prometheus_remote_storage_samples_failed_total[1m])) + sum(rate(prometheus_remote_storage_samples_retried_total[1m]))')"
-  # Grade the RATE, not the total: enabling remote write against an existing
-  # WAL replays it and produces a one-time burst of TSDS version conflicts,
-  # and a cumulative counter never returns to zero.
+  # Grade the RATE, not the total: a retried batch can produce a one-time
+  # burst of TSDS version conflicts, and the total stays raised afterwards.
   [[ "${bad%%.*}" =~ ^-?[0-9]+$ ]] || return 0
   [[ "${bad%%.*}" -lt 1 ]]
 }

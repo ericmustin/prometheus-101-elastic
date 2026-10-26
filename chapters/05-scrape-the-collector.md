@@ -4,6 +4,20 @@
 
 ---
 
+## Where you are
+
+Prometheus collects the app, Redis and the cluster's state. Between apps and Elastic there is often an OpenTelemetry collector, and collectors report on their own health. This chapter deploys one and lets chapter 03's rules scrape it.
+
+Grade it before you start:
+
+```bash
+make test
+```
+
+Chapters 01 to 04 pass. Chapter 05's first check fails: there is no collector yet.
+
+---
+
 ## The idea
 
 Between your apps and Elastic there is often a collector, and when telemetry goes missing someone will ask: **is the collector dropping it?**
@@ -66,7 +80,7 @@ Near zero in a healthy collector. (Empty straight after `make collector`: `rate`
 
 Prometheus may also show two yellow *Query notice* boxes saying the metric "might not be a counter". It is one, as its metadata says: Prometheus guesses from a `_total` suffix, and these names do not have one. The notice is a guess, not an error, and the number under it is right.
 
-**One thing that will confuse you:** `otelcol_exporter_send_failed_metric_points` may not exist at all. OpenTelemetry creates these lazily — a counter that has never counted is **absent, not zero**. An empty result means "this has never happened", which is the answer you wanted but not the answer PromQL appears to give.
+**One thing that surprises people:** `otelcol_exporter_send_failed_metric_points` may not exist at all. The collector creates some counters lazily, and this one is **absent, not zero**, until a send first fails. (Others, such as `otelcol_receiver_refused_metric_points`, appear at 0 from the start.) An empty result means "this has never happened", which is the answer you wanted but not the answer PromQL appears to give.
 
 ---
 
@@ -97,7 +111,7 @@ That gives you two ways to get the router's metrics into Elastic:
 
 Here the collector's receiver exports to `debug`, so only the first one writes to Elastic.
 
-Neither is wrong. Remote write gives you `metrics.*` / `labels.*` and the Prometheus read API; OTLP gives you the OTel field model and everything else the collector can do on the way through. What you should not do is run both by accident and wonder why one metric has two shapes.
+Neither is wrong. Remote write gives you `metrics.*` / `labels.*`; OTLP gives you the OTel field model and everything else the collector can do on the way through. Both land in time series data streams that the `_prometheus` query API can read, but the same metric has different field names on each path. Choose one path per metric: running both sends the same data twice, in two shapes.
 
 ---
 
@@ -107,6 +121,14 @@ Neither is wrong. Remote write gives you `metrics.*` / `labels.*` and the Promet
 make test
 ```
 
+Chapter 05's checks: the collector is deployed; it was found by the same annotation rules, with no config change; its `otelcol_*` metrics are being scraped, including accepted and sent points and its memory; and it is accepting data.
+
+## In the field
+
+- **In superdemo:** the EDOT collectors in `agents/apm/` run in three tiers, and each reports the same `otelcol_*` counters. There they go over OTLP to a gateway, not to a Prometheus endpoint.
+- **What customers ask:** "Should our Prometheus metrics come in through remote write or a collector?" Both work, and they land with different field shapes. Pick one path per metric, so the same data doesn't arrive twice.
+- **Good practice:** treat collectors as part of the pipeline you monitor: alert on refused and failed points, and on accepted minus sent staying above zero.
+
 ## What you now know
 
 | | |
@@ -114,8 +136,8 @@ make test
 | **Collectors are scrape targets** | once a `pull` reader gives them an endpoint |
 | **`pull` vs `periodic` readers** | Prometheus format on a port, or OTLP to a gateway |
 | **The four counters** | accepted / refused / sent / send_failed, read as a pipeline |
-| **Lazy metric creation** | a counter that never counted is absent, not zero |
+| **Lazy metric creation** | `send_failed` is absent, not zero, until a send first fails |
 | **`hostNetwork`** | a port you bind is a port on the node |
 | **A collector can be a Prometheus** | a `prometheus` receiver scrapes, then exports over OTLP |
 
-Next: the bill.
+Next: choosing what to send.

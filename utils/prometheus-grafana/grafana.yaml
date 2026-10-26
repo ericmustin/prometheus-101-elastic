@@ -116,7 +116,9 @@ spec:
       targetPort: http
       nodePort: 30090
 ---
-# Grafana. Chapter 07 deploys it with `make grafana`.
+# Grafana. `make setup` deploys it reading only the local Prometheus, and
+# chapter 07's `make grafana` adds the Elastic datasource (build.sh -g elastic
+# keeps the block marked below; -g true leaves it out).
 #
 # superdemo provisions TWO datasources, both `type: prometheus`: the real
 # Prometheus, and Elasticsearch's Prometheus-compatible read endpoint. That
@@ -137,7 +139,8 @@ data:
         url: http://prometheus.infra.svc.cluster.local:9090
         isDefault: false
 
-      # Chapter 07. superdemo provisions exactly this pair, and the point is
+      # >>> chapter 07: the Elastic datasource
+      # superdemo provisions exactly this pair, and the point is
       # that BOTH are type: prometheus - Elasticsearch's _prometheus endpoint
       # speaks the Prometheus HTTP API, so nothing above the datasource has to
       # change. Same dashboards, same PromQL, different storage.
@@ -151,9 +154,18 @@ data:
         url: $ELASTIC_ES_URL/_prometheus/$DATA_STREAM
         isDefault: true
         jsonData:
+          # GET, as superdemo sets: Grafana defaults to POST, and Elasticsearch
+          # accepts form-encoded POST only when TLS terminates on Elasticsearch
+          # itself. GET with query parameters always works.
+          httpMethod: GET
           httpHeaderName1: Authorization
+          timeInterval: 15s
+        # build.sh fills the key in here, so it sits in this ConfigMap, as in
+        # superdemo. Fine for a lab; elsewhere, mount it from a Secret as an env
+        # var and write ApiKey $THAT_VAR - Grafana expands env vars here itself.
         secureJsonData:
           httpHeaderValue1: ApiKey $ELASTIC_API_KEY
+      # <<< chapter 07
 ---
 apiVersion: apps/v1
 kind: Deployment

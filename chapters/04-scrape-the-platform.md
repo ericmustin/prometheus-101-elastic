@@ -4,6 +4,20 @@
 
 ---
 
+## Where you are
+
+Prometheus discovers the routers and Redis, and their metrics reach Elastic with Kubernetes labels. Nothing yet describes the cluster itself: which pods are running, whether deployments have their replicas, whether anything is restarting. This chapter installs kube-state-metrics and gives it a job.
+
+Grade it before you start:
+
+```bash
+make test
+```
+
+Chapters 01 to 03 pass. Chapter 04's first check fails, because kube-state-metrics isn't installed yet.
+
+---
+
 ## The idea
 
 So far you have collected application metrics, which answer "is the service healthy". They do not answer "is the *cluster* healthy" — is anything crash-looping, are deployments at their replica count, is a pod stuck Pending.
@@ -22,7 +36,7 @@ That runs `utils/ksm/ksm.sh`, the same script superdemo uses. Now check the Targ
 
 ---
 
-## Why the annotations did not save you
+## Why discovery didn't find it
 
 ```bash
 kubectl -n kube-system get pod -l app.kubernetes.io/name=kube-state-metrics \
@@ -68,7 +82,7 @@ http    8080    the cluster state you want
 metrics 8081    kube-state-metrics' own process telemetry
 ```
 
-The port named `metrics` is **not** the metrics you want. Without the rule you scrape both, and the second target is quietly the wrong thing.
+The port named `metrics` is **not** the metrics you want. Without the rule you scrape both, and the second target is kube-state-metrics' own process telemetry, not cluster state.
 
 And unlike chapter 03's job, this one sets no `pod` or `node` label. kube-state-metrics' series already carry those: the pod and node each series describes. A target label of the same name would win and rename the real one to `exported_pod`, and every per-pod query would group by kube-state-metrics' own pod instead.
 
@@ -88,21 +102,21 @@ Below 1 on the second means not fully rolled out — most of a useful cluster al
 
 ---
 
-## And the bill
+## How many series it adds
 
 ```promql
 count(last_over_time({__name__=~"kube_.*"}[1m]))
 ```
 
-**About 1,250 series** on the thirteen pods you have now. Measured while building this course: **1,239** on thirteen pods, **1,316** once chapter 05's collector makes it fourteen — one more pod, about 80 more series, and nobody ordered them.
+**About 1,250 series** on the thirteen pods you have now. Measured while building this course: **1,239** on thirteen pods, **1,316** once chapter 05's collector makes it fourteen — one more pod, about 80 more series.
 
 ```promql
 topk(8, count by (__name__) (last_over_time({__name__=~"kube_.*"}[1m])))
 ```
 
-`kube_pod_status_qos_class`, `kube_pod_status_scheduled` — one series per pod per possible value, for values nobody queries.
+`kube_pod_status_qos_class`, `kube_pod_status_scheduled` — one series per pod per possible value, whether or not anything queries them.
 
-**The arithmetic that matters:** this scales with the *cluster*, not your application, and it grows when someone adds capacity — exactly when nobody is thinking about cardinality. Chapter 06 is what to do about it.
+**Worth knowing when you size things:** this count follows the *cluster*, not your application, so it grows when capacity is added. Chapter 06 looks at the options for managing it.
 
 > `last_over_time` matters here. A bare `count()` returns the last sample of every series inside the five-minute staleness window, so straight after a change it reports the old number and looks like nothing happened.
 
@@ -114,7 +128,7 @@ topk(8, count by (__name__) (last_over_time({__name__=~"kube_.*"}[1m])))
 make esql Q=queries/esql/04-cluster-state.esql
 ```
 
-Running pods per namespace, five minutes at a time, from the same data stream as the trading app and under the same `labels.namespace` its series have carried since chapter 03. Cluster state next to trading throughput, so you can see whether they move together: that correlation is most of the argument for centralising at all.
+Running pods per namespace, five minutes at a time, from the same data stream as the trading app and under the same `labels.namespace` its series have carried since chapter 03. Cluster state next to trading throughput, so you can see whether they move together. Seeing them side by side is one of the main reasons to centralise.
 
 ---
 
@@ -124,14 +138,22 @@ Running pods per namespace, five minutes at a time, from the same data stream as
 make test
 ```
 
+Chapter 04's checks: kube-state-metrics is installed; its pod carries no scrape annotation, which is why it needs naming; the job has a healthy target; pod phase and deployment replicas are collected; it can count running pods; and cluster state reached Elastic alongside the application's metrics.
+
+## In the field
+
+- **In superdemo:** `utils/ksm/ksm.sh` installs kube-state-metrics, the same script you ran.
+- **What customers ask:** "Can we see cluster health next to the app?" Yes: cluster state lands in the same data stream as the app, under the same `labels.namespace`, so one query can compare them. kube-state-metrics reports state (phases, replicas, restarts); CPU and memory usage come from the kubelet's cAdvisor endpoint or a node exporter.
+- **Good practice:** give an exporter with a different shape its own job, and know its series count before you size Prometheus or plan storage.
+
 ## What you now know
 
 | | |
 |---|---|
 | **Exporters** | translate anything into the Prometheus format |
 | **kube-state-metrics** | cluster state, from one Helm install |
-| **Service vs pod annotations** | a real convention split; some things must be named |
+| **Service vs pod annotations** | both conventions are common, so some things need naming |
 | **Two ports** | the one called `metrics` is often not the metrics you want |
-| **Cluster cardinality** | scales with the cluster, and grows when capacity does |
+| **Cluster cardinality** | follows the cluster, not the app |
 
 Next: the collector.

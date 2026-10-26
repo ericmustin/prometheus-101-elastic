@@ -117,11 +117,12 @@ es_url_from_rw_endpoint() {
 }
 
 # data_stream_from_rw_endpoint <remote-write-url>
-# Elasticsearch's native endpoint routes by path:
-#   /_prometheus/<type>/<dataset>/<namespace>/api/v1/write
-#     -> <type>-<dataset>.prometheus-<namespace>
-#   /_prometheus/<type>/<dataset>/api/v1/write
-#     -> <type>-<dataset>.prometheus-default
+# Elasticsearch's native endpoint routes by path (the first segment is the
+# literal word "metrics"):
+#   /_prometheus/metrics/<dataset>/<namespace>/api/v1/write
+#     -> metrics-<dataset>.prometheus-<namespace>
+#   /_prometheus/metrics/<dataset>/api/v1/write
+#     -> metrics-<dataset>.prometheus-default
 #   /_prometheus/<target>/api/v1/write
 #     -> <target> used verbatim
 #   /_prometheus/api/v1/write

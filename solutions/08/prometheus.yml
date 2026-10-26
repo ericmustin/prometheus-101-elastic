@@ -117,13 +117,13 @@ remote_write:
       max_samples_per_send: 500
       batch_send_deadline: 5s
 
-    # Dropped at the sink boundary: still scraped, still stored locally, still
-    # queryable here for six hours. They just never leave the cluster.
+    # Dropped at remote write: still scraped, still stored here and queryable
+    # for six hours, just not sent to Elastic.
     #
-    # Different from the kube-state-metrics allow list above, and deliberately
-    # so - that data has no value locally either, so there was no reason to
-    # hold it. Node's runtime internals do: at 3am you want the last fifteen
-    # minutes of heap.
+    # A different choice from the kube-state-metrics allow list above. Nothing
+    # in this course uses those families, so they are not collected at all.
+    # Node's runtime internals help while debugging the router live, so they
+    # stay local.
     write_relabel_configs:
       - action: drop
         source_labels: [__name__]
