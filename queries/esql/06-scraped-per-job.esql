@@ -1,0 +1,4 @@
+// Per job: samples each scrape returned, before any filtering. Compare with
+// 06-kept-per-job.esql.
+PROMQL index=${DATA_STREAM} time=?_tend
+  sum by (job) (scrape_samples_scraped)

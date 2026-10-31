@@ -1,0 +1,3 @@
+// Found by the same rules: utils/redis/redis.yml carries the annotations.
+PROMQL index=${DATA_STREAM} time=?_tend
+  redis_up

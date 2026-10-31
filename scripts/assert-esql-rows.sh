@@ -7,7 +7,7 @@
 # course polls instead of asking once.
 #
 # Usage:
-#   scripts/assert-esql-rows.sh queries/esql/01-landed.esql
+#   scripts/assert-esql-rows.sh queries/esql/02-landed.esql
 #   scripts/assert-esql-rows.sh <file> --min-rows 3 --min-value 1 --timeout 300
 #
 # ${DATA_STREAM} inside the query file is substituted, so query files stay

@@ -10,11 +10,21 @@ You start with a Prometheus config that does nothing:
 scrape_configs: []
 ```
 
-Seven chapters later you have superdemo's trading app, its Redis exporter, kube-state-metrics and an EDOT collector all discovered automatically, their metrics in Elastic Serverless via remote write, filtered at the scrape and at remote write, and Grafana pointed at Elastic with its dashboards unchanged.
+Seven chapters later you have superdemo's trading app, its Redis exporter, kube-state-metrics and an EDOT collector all discovered automatically, their metrics in Elastic Serverless via remote write, filtered at the scrape and at remote write, and Grafana and Kibana running the same PromQL against Elastic.
 
 The app and its layout come from superdemo: its `router` service, namespaces, ports, `build.sh` idiom, remote write endpoint and data stream. So when you open superdemo afterwards, its Prometheus setup will look familiar.
 
-**Designed as a one-hour workshop**, assuming setup is done in advance.
+**About an hour of hands-on work**, assuming setup is done in advance, or the eight walkthrough videos on their own.
+
+---
+
+## Why this workshop
+
+Most of your Kubernetes customers already run Prometheus. It is the default for Kubernetes metrics: an open format, hundreds of exporters, and a query language, PromQL, that their engineers already know. What they struggle with is everything around it: keeping data longer than one server's disk allows (15 days by default), seeing across clusters, putting metrics next to logs and traces, and controlling what it all costs.
+
+Elastic answers those without asking them to give anything up. Prometheus keeps scraping, remote write adds Elastic as a destination, and the same PromQL runs in Kibana and in their existing Grafana.
+
+Each chapter teaches one Prometheus skill hands-on, shows the same query in Kibana, and ends with what to say to a customer, what to ask, and how to answer the usual objection. [`docs/FIELD-GUIDE.md`](docs/FIELD-GUIDE.md) collects all of it, with a five-minute demo you can run at the end.
 
 ---
 
@@ -34,7 +44,7 @@ cd prometheus-101-elastic
 
 ```bash
 cp .env.example .env
-$EDITOR .env                         # ELASTIC_PROM_RW_ENDPOINT and ELASTIC_API_KEY
+$EDITOR .env                         # ELASTIC_PROM_RW_ENDPOINT, ELASTIC_API_KEY, KIBANA_URL
 
 make check                           # is this machine ready? prints your URLs
 make setup                           # cluster, app, Prometheus (~3 min)
@@ -71,14 +81,17 @@ Everything is producing metrics, and nothing is collecting them: Prometheus runs
 
 ## The loop
 
-Every chapter is the same four steps.
+Every chapter is the same five steps.
 
 ```bash
 make chapter 3                       # start chapter 3
+make goals                           # what it asks of you: its checks, once, no waiting
 $EDITOR prometheus/prometheus.yml    # make the change the chapter asks for
 make apply                           # render, validate, push to the cluster
-make test                            # grade it
+make test                            # grade it: waits for data, then decides
 ```
+
+**▶ Your turn** in a chapter, or the same card in a video, marks a step to do on your own cluster.
 
 Then `make chapter 4`, and so on. Stuck at any point:
 
@@ -110,9 +123,9 @@ There are no branches. Editing `prometheus/prometheus.yml` and running `make cha
 | 04 | Scrape the platform | kube-state-metrics, exporters, jobs as grouping | the chart annotates the Service, not the pod |
 | 05 | Scrape the collector | `otelcol_*`, pull vs periodic readers | `send_failed` is absent, not zero, until a send fails |
 | 06 | Choose what to send | filtering at the scrape vs at remote write, retention in Elastic | anchored regexes match nothing, silently |
-| 07 | Grafana → Elastic | one datasource swap, dashboards unchanged | the API is a subset; exemplars do not port |
+| 07 | Grafana → Elastic | one datasource added; test the customer's dashboards | the API is a subset; exemplars do not port |
 
-Each chapter starts with **Where you are**: a map of the cluster showing what is collected so far and what the chapter adds, and a `make test` run that shows its checks failing. Once the checks pass, **What you collect now** shows the same map with the chapter's work in place. Then **In the field**: where the piece lives in superdemo, what customers ask about it, and how to adapt it.
+Each chapter starts with **Why it matters**: the customer's problem, what the chapter's Prometheus skill does about it, and why it is worth investing in. **Where you are** follows: a map of the cluster showing what is collected so far and what the chapter adds, and `make goals` listing its checks. Once the checks pass, **What you collect now** shows the same map with the chapter's work in place. Then **In the field**: what to say, what to ask, an objection and its answer, and where the piece lives in superdemo. **Explain it back** is the question you should now be able to answer for a customer.
 
 You mostly edit `prometheus/prometheus.yml`. Chapter 03 also edits `k8s/router.yaml`; chapters 05 and 07 change no file at all, and in both cases that is the lesson.
 
@@ -120,14 +133,21 @@ You mostly edit `prometheus/prometheus.yml`. Chapter 03 also edits `k8s/router.y
 
 ## Looking at the data
 
-From chapter 02 onward the answers are in Kibana, not the Prometheus expression browser.
+From chapter 02 onward you query in **Kibana**: Discover, in ES|QL mode. PromQL runs there through the `PROMQL` command, so the queries are the ones a Prometheus user already writes:
 
-```bash
-make esql Q=queries/esql/03-router-rate-by-region.esql   # run it, print a table
-make links                                               # every query, ready to paste
+```esql
+PROMQL index=metrics-generic.prometheus-default step=1m
+  sum by (region) (rate(http_requests_total[5m]))
 ```
 
-`queries/esql/*.esql` contain `${DATA_STREAM}`, which Kibana does not expand — so paste from `make links`, not from the files.
+`step=1m` draws a line over the date picker's range, like Prometheus's Graph tab; `time=?_tend` gives one answer at its end, like the Table tab. The Prometheus expression browser stays for chapter 01, and for questions about Prometheus itself.
+
+```bash
+make links                                               # every query, with a link that opens it in Discover
+make esql Q=queries/esql/03-requests-by-region.esql      # or run one here and print a table
+```
+
+`queries/esql/*.esql` contain `${DATA_STREAM}`, which Kibana does not expand — so paste from `make links`, not from the files. `make links` needs `KIBANA_URL` in `.env`.
 
 ---
 
@@ -137,7 +157,7 @@ make links                                               # every query, ready to
 prometheus/prometheus.yml   the file you edit
 chapters/                   the course, one markdown file per chapter
 solutions/NN/               each chapter's starting state
-queries/esql/               ES|QL queries, used from chapter 02 onward
+queries/esql/               the Kibana queries (ES|QL and PROMQL), by chapter
 src/router/                 superdemo's router, vendored unmodified
 k8s/                        envsubst templates: router, recorder, monkey
 utils/                      redis, kube-state-metrics, prometheus + grafana
@@ -145,6 +165,7 @@ agents/apm/                 the EDOT collector
 build.sh                    superdemo's deploy idiom; make wraps it
 scripts/                    setup, apply, chapter switching, assertions
 test/                       the grader
+docs/FIELD-GUIDE.md         what to say, ask and demo: the course's field material in one place
 docs/SUPERDEMO-MAP.md       what you built, and where it is in superdemo
 docs/images/                the cluster maps and diagrams the chapters use, and video stills
 ```

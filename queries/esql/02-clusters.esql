@@ -1,0 +1,6 @@
+// Which clusters are sending, by the external_labels you stamped.
+// time=?_tend is an instant query: one answer, at the end of the date
+// picker, like the Table tab in Prometheus. In a customer estate there is a
+// row per cluster, and a row that disappears is a cluster that stopped sending.
+PROMQL index=${DATA_STREAM} time=?_tend
+  count by (cluster, env) (up)

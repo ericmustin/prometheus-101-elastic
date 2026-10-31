@@ -1,0 +1,4 @@
+// Errors: the same rate, split by status code. An error ratio divides the
+// 5xx lines by the total. On this lab every request returns 200.
+PROMQL index=${DATA_STREAM} step=1m
+  sum by (region, status) (rate(http_requests_total[5m]))

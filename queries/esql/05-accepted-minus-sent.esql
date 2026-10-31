@@ -1,0 +1,5 @@
+// Read the collector as a pipeline: what came in minus what went out.
+// Near zero when healthy. Two sums subtracted, so both sides line up.
+PROMQL index=${DATA_STREAM} step=1m
+  sum(rate(otelcol_receiver_accepted_metric_points[5m]))
+  - sum(rate(otelcol_exporter_sent_metric_points[5m]))

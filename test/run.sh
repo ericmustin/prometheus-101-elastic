@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Grade your work.
 #
-#   make test          - grade the chapter you are on (from the branch name)
+#   make test          - grade the chapter you are on
+#   make goals         - the same checks, one pass, no waiting: what this
+#                        chapter asks of you, before you start
 #   CHAPTER=05 make test
 #   test/run.sh --all  - grade everything, chapter 01 through 07
 #
@@ -51,7 +53,11 @@ if ! prom_up; then
   exit 2
 fi
 
-printf '\nGrading chapter %s (cumulative: 01 through %s)\n' "${target}" "${target}"
+if [[ "${GRADE_QUICK:-}" == 1 ]]; then
+  printf '\nGoals for chapter %s: every check once, no waiting (01 through %s)\n' "${target}" "${target}"
+else
+  printf '\nGrading chapter %s (cumulative: 01 through %s)\n' "${target}" "${target}"
+fi
 printf 'Prometheus: %s\n' "${PROM_URL}"
 if es_available; then
   printf 'Elastic:    %s\n' "${DATA_STREAM}"

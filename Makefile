@@ -8,17 +8,18 @@ ifneq (,$(filter chapter,$(firstword $(MAKECMDGOALS))))
   $(eval $(CHAPTER_ARG):;@:)
 endif
 
-.PHONY: help setup check apply test hint answer chapter status \
+.PHONY: help setup check apply test goals hint answer chapter status \
         ksm collector grafana links import \
         esql logs clean
 
 help:
-	@echo "Prometheus 101 - seven chapters, about an hour"
+	@echo "Prometheus 101 - seven chapters"
 	@echo
 	@echo "  make setup          build the cluster, the trading app, and Prometheus"
 	@echo "  make check          is this machine ready? (Gate 0)"
 	@echo
 	@echo "  make apply          push your prometheus.yml into the cluster"
+	@echo "  make goals          what this chapter asks of you (checks once, no waiting)"
 	@echo "  make test           grade the chapter you are on"
 	@echo "  make hint           what is still different from the solution"
 	@echo "  make answer         the change this chapter is asking for"
@@ -32,7 +33,7 @@ help:
 	@echo "  make links          chapter 02+: every course query, ready to paste in Kibana"
 	@echo "  make import         chapter 07: import superdemo's saved search"
 	@echo
-	@echo "  make esql Q=queries/esql/03-router-rate-by-region.esql"
+	@echo "  make esql Q=queries/esql/03-requests-by-region.esql"
 	@echo "  make logs           Prometheus pod logs"
 	@echo "  make clean          delete the cluster"
 
@@ -40,6 +41,7 @@ setup:      ; @scripts/setup.sh
 check:      ; @scripts/check-env.sh
 apply:      ; @scripts/apply-config.sh
 test:       ; @test/run.sh
+goals:      ; @GRADE_QUICK=1 test/run.sh || true
 hint:       ; @scripts/chapter.sh hint
 answer:     ; @scripts/chapter.sh answer
 status:     ; @scripts/chapter.sh status

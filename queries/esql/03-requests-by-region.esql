@@ -1,0 +1,5 @@
+// Rate: requests per second, per region. rate() turns an ever-growing
+// counter into a per-second number and copes with restarts; sum by keeps
+// the one label the question is about and adds up every pod behind it.
+PROMQL index=${DATA_STREAM} step=1m
+  sum by (region) (rate(http_requests_total[5m]))

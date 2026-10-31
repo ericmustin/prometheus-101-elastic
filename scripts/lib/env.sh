@@ -263,3 +263,21 @@ es_curl() {
     -H "Content-Type: application/json" \
     "${url}" "$@"
 }
+
+# The request body Kibana's Discover sends for a PROMQL query: the date
+# picker's range as a filter on @timestamp, and its two ends as ?_tstart and
+# ?_tend. <since> is 15m, 2m, 1h and so on.
+promql_body() {
+  local query="$1" since="$2" secs
+  case "${since}" in
+    *h) secs=$(( ${since%h} * 3600 )) ;;
+    *m) secs=$(( ${since%m} * 60 )) ;;
+    *s) secs=${since%s} ;;
+    *)  secs=${since} ;;
+  esac
+  printf '%s' "${query}" | jq -Rs --argjson secs "${secs}" '
+    (now | floor) as $t |
+    {query: .,
+     filter: {range: {"@timestamp": {gte: (($t - $secs) | todate), lte: ($t | todate)}}},
+     params: [{_tstart: (($t - $secs) | todate)}, {_tend: ($t | todate)}]}'
+}

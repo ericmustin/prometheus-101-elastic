@@ -1,0 +1,3 @@
+// Running pods per namespace, from kube-state-metrics.
+PROMQL index=${DATA_STREAM} time=?_tend
+  sum by (namespace) (kube_pod_status_phase{phase="Running"})

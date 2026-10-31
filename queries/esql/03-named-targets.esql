@@ -1,0 +1,4 @@
+// The three targets you named, and the only labels they carry: job and
+// instance, plus the cluster and env your external_labels stamp on the way out.
+PROMQL index=${DATA_STREAM} time=?_tend
+  up{job="trading-app"}

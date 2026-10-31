@@ -1,0 +1,5 @@
+// Duration: the 95th percentile, per region. A histogram counts requests
+// into buckets (le = "less than or equal"), so buckets from every pod add up
+// before the quantile is taken. Averages hide the slow requests users feel.
+PROMQL index=${DATA_STREAM} step=1m
+  histogram_quantile(0.95, sum by (le, region) (rate(http_request_duration_seconds_bucket[5m])))

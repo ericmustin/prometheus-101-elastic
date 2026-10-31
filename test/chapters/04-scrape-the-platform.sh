@@ -29,5 +29,7 @@ else
     else
       fail "cluster-state metrics reached Elastic" "check remote write health"
     fi
+    assert_query_answers queries/esql/04-running-pods.esql \
+      "running pods per namespace answer in Kibana"
   fi
 fi

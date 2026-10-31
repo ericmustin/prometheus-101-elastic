@@ -66,7 +66,7 @@ es_count_field() {
 # something that passes when the learner has done nothing. Narrow the window
 # and poll for delivery instead of widening it and hoping.
 wait_for_esql_rows() {
-  local query="$1" timeout="${2:-180}"
+  local query="$1" timeout; timeout="$(wait_budget "${2:-180}")"
   local deadline=$(( $(date +%s) + timeout )) n
   while :; do
     n="$(esql_rows "${query}")"
@@ -76,9 +76,44 @@ wait_for_esql_rows() {
   done
 }
 
+# Rows a course query file returns, run the way Kibana runs it: comments
+# stripped, ${DATA_STREAM} substituted, and for PROMQL the date picker's range
+# sent as a filter. The window is the last <since> only (default 2m), for the
+# same reason as above: a wide one still holds an earlier run's data.
+query_file_rows() {
+  local file="$1" since="${2:-2m}" query body
+  query="$(sed -e 's|^[[:space:]]*//.*$||' -e '/^[[:space:]]*$/d' "${file}" \
+    | sed -e "s|\${DATA_STREAM}|${DATA_STREAM}|g")"
+  if grep -qm1 '^[[:space:]]*PROMQL' <<<"${query}"; then
+    body="$(promql_body "${query}" "${since}")"
+  else
+    body="$(printf '%s' "${query}" | jq -Rs '{query: .}')"
+  fi
+  es_curl POST "_query?format=json" -d "${body}" \
+    | jq -r 'if has("error") then -1 else ((.values // []) | length) end' 2>/dev/null || echo -1
+}
+
+# The Kibana query a chapter asks you to run answers, polled until it does.
+# assert_query_answers <file> <description> [timeout]
+assert_query_answers() {
+  local file="${ROOT_DIR}/$1" desc="$2" timeout n deadline
+  timeout="$(wait_budget "${3:-180}")"
+  deadline=$(( $(date +%s) + timeout ))
+  while :; do
+    n="$(query_file_rows "${file}")"
+    if [[ "${n}" =~ ^[0-9]+$ ]] && [[ "${n}" -ge 1 ]]; then pass "${desc}"; return 0; fi
+    if [[ "$(date +%s)" -ge "${deadline}" ]]; then
+      if [[ "${n}" == "-1" ]]; then fail "${desc}" "the query failed: make esql Q=$1"
+      else fail "${desc}" "no rows in the last 2 minutes: make esql Q=$1"; fi
+      return 1
+    fi
+    sleep 10
+  done
+}
+
 # Poll until at least <min> documents with <field> have arrived.
 wait_for_docs() {
-  local field="$1" min="${2:-1}" window="${3:-now-5m}" timeout="${4:-240}"
+  local field="$1" min="${2:-1}" window="${3:-now-5m}" timeout; timeout="$(wait_budget "${4:-240}")"
   local deadline=$(( $(date +%s) + timeout ))
   while :; do
     local n; n="$(es_count_field "${field}" "${window}")"

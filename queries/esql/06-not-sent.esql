@@ -1,0 +1,4 @@
+// Dropped at remote write: still in Prometheus, no longer reaching Elastic.
+// The line stops where your write_relabel_configs took effect.
+PROMQL index=${DATA_STREAM} step=1m
+  nodejs_heap_size_total_bytes

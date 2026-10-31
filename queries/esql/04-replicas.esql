@@ -1,0 +1,7 @@
+// Available replicas over desired, per deployment. Below 1 means not fully
+// rolled out. Both sides are aggregated by the labels they are matched on:
+// Kibana requires it when dividing two different metrics, and it makes the
+// match explicit in Prometheus too.
+PROMQL index=${DATA_STREAM} time=?_tend
+  sum by (namespace, deployment) (kube_deployment_status_replicas_available)
+  / sum by (namespace, deployment) (kube_deployment_status_replicas)

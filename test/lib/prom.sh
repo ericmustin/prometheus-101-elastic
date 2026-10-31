@@ -83,7 +83,7 @@ prom_running_config() {
 # `make test` straight after `make apply` would otherwise see a spurious
 # failure with no explanation.
 prom_scalar_ready() {
-  local query="$1" timeout="${2:-180}"
+  local query="$1" timeout; timeout="$(wait_budget "${2:-180}")"
   local deadline=$(( $(date +%s) + timeout ))
   local v
   while :; do
@@ -107,7 +107,7 @@ prom_scalar_ready() {
 # now" assertion sampled once right after an edit sees old + new added
 # together. Every such assertion in this suite polls instead.
 wait_for_count_le() {
-  local query="$1" max="$2" timeout="${3:-180}"
+  local query="$1" max="$2" timeout; timeout="$(wait_budget "${3:-180}")"
   local deadline=$(( $(date +%s) + timeout ))
   local v
   while :; do
@@ -190,7 +190,7 @@ remote_write_delivering() {
 # interval and a freshly restarted Prometheus reports health "unknown" until
 # the first one lands, so every target assertion needs this.
 wait_for_healthy_targets() {
-  local job="$1" want="$2" timeout="${3:-90}"
+  local job="$1" want="$2" timeout; timeout="$(wait_budget "${3:-90}")"
   local deadline=$(( $(date +%s) + timeout ))
   while :; do
     [[ "$(prom_healthy_target_count "${job}")" -ge "${want}" ]] && return 0

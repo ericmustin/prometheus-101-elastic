@@ -1,6 +1,12 @@
 # Chapter 02 — Get it into Elastic
 
-**Goal:** get metrics out of the cluster on your second edit, so Kibana — not the Prometheus expression browser — is where you spend the rest of the course.
+**Goal:** get metrics out of the cluster on your second edit, so Kibana — not the Prometheus expression browser — is where you query them for the rest of the course.
+
+## Why it matters
+
+- **The problem:** a Prometheus server keeps its data on one disk, for one cluster: 15 days by default, 6 hours in this lab. Teams that need longer history, one view across clusters, or metrics next to logs and traces end up running more systems to get it: federation, or long-term stores such as Thanos, Cortex or Mimir.
+- **What Prometheus does:** remote write streams every sample to another system as it is scraped. Scraping, rules and alerts carry on as before.
+- **Why it's worth it:** the customer keeps the Prometheus they have invested in and adds one block of config. Elasticsearch accepts remote write natively and answers PromQL, so their queries carry over. New data lands from the day it is switched on; history already in another store stays there.
 
 ---
 
@@ -10,21 +16,17 @@ Prometheus scrapes itself and keeps about six hours of history on its own disk. 
 
 ![Where you are, before chapter 02: Prometheus collects its own metrics. Elastic has none of them. This chapter: Add remote write, so every sample also goes to Elastic.](../docs/images/topology-02-before.png)
 
-Grade it before you start:
-
 ```bash
-make test
+make goals
 ```
 
-Chapter 01 passes. Chapter 02's checks fail: there is no `remote_write` block, so nothing is delivered and nothing has landed. The delivery check waits a few minutes before it gives up.
+Chapter 01's checks pass. Chapter 02's are to do: there is no `remote_write` block, so nothing is delivered and nothing has landed.
 
 ---
 
-## Why now
+## The endpoint
 
-This lab's Prometheus keeps 6 hours on one disk (the default is 15 days), cannot be queried across clusters, and holds metrics apart from logs and traces. **Remote write** streams every sample to an HTTP endpoint alongside the local disk. Nothing about scraping changes.
-
-Elasticsearch speaks the protocol natively — no collector, no agent, no conversion:
+Elasticsearch speaks the remote write protocol natively — no collector, no agent, no conversion:
 
 ```
 https://<your-elasticsearch>/_prometheus/api/v1/write
@@ -39,7 +41,7 @@ superdemo's URL, with **no routing segments** — it lands in `metrics-generic.p
   -> metrics-<dataset>.prometheus-<namespace>
 ```
 
-`generic` works well for one cluster. With a second, route each cluster to its own data stream, so you can tell them apart and set retention separately. Yours:
+`generic` works well to start. Clusters are told apart by a label (`external_labels`, below), not by data stream; route to separate data streams when teams need different retention or ownership. Yours:
 
 ```bash
 make check | grep "Data stream"
@@ -49,7 +51,7 @@ make check | grep "Data stream"
 
 ## Do it wrong first
 
-Add a `remote_write` block with no credentials:
+**▶ Your turn:** add a `remote_write` block with no credentials:
 
 ```yaml
 remote_write:
@@ -63,7 +65,7 @@ remote_write:
 make apply
 ```
 
-The Targets page stays green: remote write is a **separate pipeline** with separate failure modes, and that page knows nothing about it.
+The Targets page stays green: remote write is a **separate pipeline** with separate failure modes, and that page knows nothing about it. In the Prometheus expression browser:
 
 ```promql
 prometheus_remote_storage_samples_failed_total
@@ -71,7 +73,14 @@ prometheus_remote_storage_samples_failed_total
 
 **Climbing**: a failure this counter shows. Elasticsearch returns 401, which Prometheus treats as **non-recoverable**: it drops the batch and counts it.
 
-Now the part worth slowing down for:
+Now ask Elastic. Open Kibana → **Discover**, switch to **ES|QL**, and run:
+
+```esql
+PROMQL index=metrics-generic.prometheus-default step=1m
+  prometheus_remote_storage_samples_failed_total
+```
+
+**No results.** Elastic can't see a pipe that isn't delivering, so a broken remote write is debugged at the source, in Prometheus. That is also why the next query matters:
 
 ```promql
 time() - prometheus_remote_storage_queue_highest_sent_timestamp_seconds
@@ -79,7 +88,11 @@ time() - prometheus_remote_storage_queue_highest_sent_timestamp_seconds
 
 **About 20 seconds** — reads as "all is well" while **100% of your samples are being rejected**. Prometheus advances that clock when it *finishes with* a batch, and giving up counts as finishing.
 
+*Why this shape:* "now minus the newest thing delivered" is how every freshness alert is written. It catches a pipe that has stopped, but not one that is rejecting everything.
+
 ### Break it the other way
+
+**▶ Your turn:** add credentials that point at a file that does not exist:
 
 ```yaml
     authorization:
@@ -115,7 +128,7 @@ Both measured here, not quoted from documentation:
 
 ## Now do it properly
 
-Add `external_labels` under the `global:` block you already have, and replace your `remote_write` block with this one:
+**▶ Your turn:** add `external_labels` under the `global:` block you already have, and replace your `remote_write` block with this one:
 
 ```yaml
 global:
@@ -149,7 +162,40 @@ make apply
 
 ---
 
-## A burst of errors you may see
+## Now query it in Kibana
+
+From here on, queries run in Kibana's Discover, in ES|QL mode. Paste each one, or let `make links` print every course query with a link that opens it already typed:
+
+```bash
+make links
+```
+
+First, did anything arrive?
+
+```esql
+FROM metrics-generic.prometheus-default
+| WHERE @timestamp > NOW() - 15 minutes AND `labels.cluster` == "prometheus-101"
+| STATS samples = COUNT(*),
+        regions = COUNT_DISTINCT(`labels.region`),
+        services = COUNT_DISTINCT(`labels.service`)
+```
+
+Your sample count will differ; the other two will not. `regions` and `services` are **zero** because nothing has attached those labels — the only thing being scraped is Prometheus itself. Chapter 03 is where they stop being zero. (Not zero? If you finished an earlier run of the course in the last 15 minutes, its data is still in the window.)
+
+That was ES|QL, Elastic's own query language. PromQL runs here too, through the `PROMQL` command:
+
+```esql
+PROMQL index=metrics-generic.prometheus-default time=?_tend
+  count by (cluster, env) (up)
+```
+
+One row: `prometheus-101`, `lab`, `1`. The labels you stamped in `external_labels`, now a dimension you can group by.
+
+*Why this shape:* `count by` the label that names a cluster gives one row per cluster still sending. In a customer's estate with twenty clusters, a row that disappears is a cluster that stopped sending, and this is the view no single Prometheus can give them.
+
+**Instant or range.** Prometheus's Table tab is an *instant* query: one answer, now. Its Graph tab is a *range* query: a point every step. In Kibana you choose with one parameter: `time=?_tend` answers at the end of the date picker's range, and `step=1m` gives a point a minute across it.
+
+### A burst of errors you may see
 
 `make logs` may show this within a minute or two of the change:
 
@@ -160,41 +206,30 @@ VersionConflictEngineException: version conflict, document already exists
 
 If it does, it is one-time. Elasticsearch stores remote write in a **time series data stream**, which deduplicates, so a retried batch that re-sends samples that already landed is rejected. A clean first run often shows nothing at all, and newer Elasticsearch releases drop duplicates silently instead of returning an error.
 
-```promql
-rate(prometheus_remote_storage_samples_failed_total[2m])
+The failure counters now reach Elastic, so check it there:
+
+```esql
+PROMQL index=metrics-generic.prometheus-default step=1m
+  rate(prometheus_remote_storage_samples_failed_total[2m])
 ```
 
-Back to zero and stays there. **Alert on the rate, not the total**: the total stays raised after a burst (until the next restart resets it), while the rate returns to zero.
-
----
-
-## Now move to Kibana
-
-```bash
-make esql Q=queries/esql/01-landed.esql
-```
-
-```
-    samples    |    regions    |   services
----------------+---------------+---------------
-4776           |0              |0
-```
-
-Your sample count will differ; the other two will not. `regions` and `services` are **zero** because nothing has attached those labels — the only thing being scraped is Prometheus itself. Chapter 03 is where they stop being zero. (Not zero? If you finished an earlier run of the course in the last 15 minutes, its data is still in the window.)
-
-```bash
-make links
-```
-
-Every course query, ready to paste, plus a link that opens it already typed. Keep the editor open — from here on, check things in Kibana unless the question is about Prometheus's own internals.
+Back to zero and stays there. **Alert on the rate, not the total**: the total stays raised after a burst (until the next restart resets it), while the rate returns to zero. Evaluated here, the same expression watches every cluster's pipe from one place.
 
 ### The field model
 
-```bash
-make esql Q=queries/esql/02-metrics-info.esql
+Every metric that landed, charted, with no query at all:
+
+```esql
+TS metrics-generic.prometheus-default
 ```
 
-**Values go under `metrics.`, labels under `labels.`**, and Elasticsearch infers metric type from the name suffix — `_total`, `_sum`, `_count`, `_bucket` mean counter, everything else gauge. The naming convention is not style; a downstream system reads it.
+Discover draws a grid from the `TS` command alone. (It shows counters as sums, not rates: use PromQL's `rate()` when you need one.) And what remote write actually created:
+
+```bash
+make esql Q=queries/esql/02-field-model.esql
+```
+
+**Values go under `metrics.`, labels under `labels.`**, and Elasticsearch infers metric type from the name suffix — `_total`, `_sum`, `_count`, `_bucket` mean counter, everything else gauge. The naming convention is not style; a downstream system reads it. PromQL in Kibana hides the prefixes: you write `up`, not `metrics.up`.
 
 That shape belongs to *the path*, not the app: the same counter sent over OTLP lands in the OpenTelemetry field model instead, with its label under `attributes.symbol`. Which is why "we support Prometheus" needs a follow-up — which Prometheus? A scrape source, a collector input, a wire protocol, a field shape, or a query language.
 
@@ -206,7 +241,7 @@ That shape belongs to *the path*, not the app: the same counter sent over OTLP l
 make test
 ```
 
-Chapter 02's checks: the running config has a `remote_write` block, the key is read from a file, remote write is delivering by both measures, data is queryable in your data stream, and documents carry `labels.cluster` from `external_labels`.
+Chapter 02's checks: the running config has a `remote_write` block, the key is read from a file, remote write is delivering by both measures, data is queryable in your data stream, documents carry `labels.cluster` from `external_labels`, and the fleet view answers in Kibana.
 
 ## What you collect now
 
@@ -214,9 +249,13 @@ Chapter 02's checks: the running config has a `remote_write` block, the key is r
 
 ## In the field
 
+- **Say it:** "Keep your Prometheus. Add one `remote_write` block and every sample also goes to Elastic, kept as long as you choose and queried with the PromQL you already write."
+- **Ask:** "How many clusters do you run, and how do you see across them today?" and "How would you know if one of them stopped sending metrics?"
+- **If they say** "We already run Thanos (or Mimir) for that": then they know why central storage matters. Ask what running it costs in people and infrastructure, and how they get from a metric to the logs behind it today. Elastic keeps metrics, logs and traces in one place, queried with PromQL or ES|QL.
+- **Good practice:** label each cluster with `external_labels`, route teams with different retention needs to their own data streams (the `/_prometheus/metrics/<dataset>/<namespace>` path here, or the `data_stream_dataset` and `data_stream_namespace` labels through the managed endpoint), keep the API key in a Secret, and watch remote write with both the failure and the lag signals.
 - **In superdemo:** its Prometheus remote-writes to the same `_prometheus/api/v1/write` URL, into `metrics-generic.prometheus-default`, so the queries you ran here work against a running superdemo.
-- **What customers ask:** "Do we have to replace Prometheus?" No. Remote write adds a destination: local scraping, rules and alerts keep working, and Elastic adds longer retention, queries across clusters, and metrics next to logs and traces.
-- **Good practice:** label each cluster with `external_labels`, route clusters or teams to their own data streams (the `/_prometheus/metrics/<dataset>/<namespace>` path here, or the `data_stream_dataset` and `data_stream_namespace` labels through the managed endpoint), keep the API key in a Secret, and watch remote write with both the failure and the lag signals.
+
+**Explain it back:** remote write is failing. Which two signals do you check, and why isn't either one enough on its own?
 
 ## What you now know
 
@@ -229,6 +268,7 @@ Chapter 02's checks: the running config has a `remote_write` block, the key is r
 | **`credentials_file`** | keys come from Secrets; ConfigMaps are plaintext |
 | **`external_labels`** | stamped on the way out; how you tell clusters apart |
 | **The self-metrics** | two failure modes, each in a different counter |
+| **`PROMQL` in Kibana** | the same PromQL; `time=` for an instant answer, `step=` for a range |
 | **A conflict burst** | possible once, from a retried batch; alert on rate, not total |
 | **`metrics.` / `labels.`** | the Prometheus field shape in Elasticsearch |
 

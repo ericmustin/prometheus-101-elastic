@@ -40,6 +40,11 @@ fi
 rows="$(wait_for_esql_rows "FROM ${DATA_STREAM} | WHERE @timestamp > NOW() - 2 minutes AND \`labels.cluster\` == \"prometheus-101\" | LIMIT 1")"
 assert_ge "${rows}" 1 "documents carry labels.cluster from external_labels"
 
+# The chapter's first PromQL in Kibana. It groups by the external_labels, so
+# it answers only once they are stamped on what arrives.
+assert_query_answers queries/esql/02-clusters.esql \
+  "the fleet view answers in Kibana: count by (cluster, env) (up)"
+
 fi   # rw_ok
 
 fi   # es_available

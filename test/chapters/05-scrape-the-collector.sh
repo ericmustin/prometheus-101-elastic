@@ -28,4 +28,9 @@ else
   # It is not just up - it is moving data.
   accepted="$(prom_count_scalar 'sum(otelcol_receiver_accepted_metric_points)')"
   assert_ge "${accepted}" 1 "the collector is actually accepting metric points (${accepted%%.*})"
+
+  if es_available; then
+    assert_query_answers queries/esql/05-accepted-minus-sent.esql \
+      "accepted minus sent answers in Kibana"
+  fi
 fi

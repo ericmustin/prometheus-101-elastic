@@ -1,0 +1,4 @@
+// How many series kube-state-metrics exposes per scrape. Prometheus writes
+// scrape_samples_scraped for every target, so this works for any exporter.
+PROMQL index=${DATA_STREAM} time=?_tend
+  scrape_samples_scraped{job="kube-state-metrics"}

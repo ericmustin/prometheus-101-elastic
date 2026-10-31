@@ -1,0 +1,4 @@
+// Per job: samples each scrape returned, and samples kept after
+// metric_relabel_configs. The gap is what your allow list dropped.
+PROMQL index=${DATA_STREAM} time=?_tend
+  sum by (job) (scrape_samples_post_metric_relabeling)

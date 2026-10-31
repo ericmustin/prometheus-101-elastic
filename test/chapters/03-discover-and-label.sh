@@ -71,4 +71,8 @@ if es_available; then
   # labels.service. Narrow window, and poll for delivery.
   rows="$(wait_for_esql_rows "FROM ${DATA_STREAM} | WHERE @timestamp > NOW() - 2 minutes AND \`labels.service\` == \"router\" AND \`labels.namespace\` IS NOT NULL | LIMIT 1")"
   assert_ge "${rows}" 1 "Kubernetes context reached Elastic (labels.service, labels.namespace)"
+
+  # RED starts here: the router's requests, per region, in Kibana.
+  assert_query_answers queries/esql/03-requests-by-region.esql \
+    "requests per region answer in Kibana"
 fi

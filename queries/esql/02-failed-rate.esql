@@ -1,0 +1,6 @@
+// The alert expression for rejected samples, evaluated centrally.
+// rate() of a counter returns to zero after a burst; the raw total stays
+// raised until Prometheus restarts. step=1m is a range query: a point a
+// minute across the date picker, like the Graph tab in Prometheus.
+PROMQL index=${DATA_STREAM} step=1m
+  rate(prometheus_remote_storage_samples_failed_total[2m])

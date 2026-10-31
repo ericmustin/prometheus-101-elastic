@@ -1,0 +1,4 @@
+// What is scraped, grouped by the labels discovery wrote. count by is the
+// inventory pattern: how many of each thing, by the dimensions you care about.
+PROMQL index=${DATA_STREAM} time=?_tend
+  count by (namespace, service) (up)

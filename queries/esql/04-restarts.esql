@@ -1,0 +1,4 @@
+// Anything restarting in the last fifteen minutes. A threshold (> 0) keeps
+// only the rows worth looking at, so an empty result is the good answer.
+PROMQL index=${DATA_STREAM} step=1m
+  sum by (namespace, pod) (rate(kube_pod_container_status_restarts_total[15m])) > 0
