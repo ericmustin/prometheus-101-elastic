@@ -125,11 +125,13 @@ Measured on this course's Serverless project, 31 October 2026. Re-check before y
   - Metric-name patterns such as `{__name__=~"kube_.*"}` are rejected.
   - `label_replace` works only inside a `by()`.
   - Dividing two different metrics needs both sides aggregated by their matching labels.
+- **Beyond this course's queries:** `and`, `unless`, `on`, `ignoring`, `group_left`, the `@` modifier and subqueries return an error, in Kibana and through Grafana. Kubernetes dashboards often join series with `group_left`, so test those first.
 - **Through Grafana**, instant and range queries, label values, series and metadata answer; exemplars do not.
 - **Field shape:** remote write stores values under `metrics.` and labels under `labels.`, and infers counters from the `_total`, `_sum`, `_count` and `_bucket` suffixes. PromQL hides the prefixes; ES|QL shows them.
 - **No staleness markers:** a series that stops stays visible until its last sample leaves the query's window.
 - **Empty, not zero:** a ratio whose numerator has no series, such as an error ratio with no `5xx` traffic, returns no result rather than 0.
 - **Grafana datasource:** the URL takes a data stream or a pattern; `metrics-*.prometheus-*` reads them all.
+- **Remote write:** protocol 1.0 only; 2.0 requests are rejected. Native histograms and NaN samples are dropped without an error; classic histograms, like this course's, work. See [Elastic's remote write docs](https://www.elastic.co/docs/manage-data/data-store/data-streams/tsds-ingest-prometheus-remote-write).
 - **Production endpoint:** on Serverless and Elastic Cloud Hosted, Elastic recommends its managed remote write endpoint over writing to Elasticsearch directly, as this course does (chapter 02).
 
 ---
@@ -140,6 +142,6 @@ Elastic's own published figures. Quote them as Elastic states them, with the lin
 
 - PromQL and Prometheus remote write are generally available in Elastic Serverless and Elastic Stack 9.5: [What's new in 9.5](https://www.elastic.co/blog/whats-new-elastic-9-5-0).
 - "Keep Prometheus scraping and add Elastic as a `remote_write` target": [Elastic docs, metrics](https://www.elastic.co/docs/solutions/observability/metrics).
-- "Up to 30x faster and with up to 2.5x better storage efficiency" than Prometheus, on Elastic's own benchmark; read its setup before you quote it: [the benchmark](https://www.elastic.co/search-labs/blog/elasticsearch-columnar-metrics-engine-30x-faster-prometheus).
+- "Up to 30x faster and with up to 2.5x better storage efficiency" than Prometheus, on Elastic's own benchmark: single-node, default configurations, OpenTelemetry host metrics queried with ES|QL. Elastic says the same gains are expected for the Prometheus path. State those conditions when you quote it: [the benchmark](https://www.elastic.co/search-labs/blog/elasticsearch-columnar-metrics-engine-30x-faster-prometheus).
 - Downsampling "cuts time series storage by 94% in our OTel benchmark", and ES|QL dashboards on raw data run unchanged on downsampled data: [downsampling](https://www.elastic.co/search-labs/blog/elasticsearch-downsampling-methods-esql).
 - Grafana can query Elasticsearch through its native Prometheus API: [Grafana setup](https://www.elastic.co/docs/reference/query-languages/promql/promql-grafana).

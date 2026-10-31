@@ -101,6 +101,8 @@ Be precise with customers. Elasticsearch implements a **subset** of the Promethe
   - `label_replace` works only inside a `by()`.
   - Dividing two different metrics needs both sides aggregated by the labels they match on, as chapter 04's replica query does.
 
+  Beyond this course: `and`, `unless`, `on`, `ignoring`, `group_left`, `@` and subqueries return an error today. Kubernetes dashboards often join series with `group_left`, so test those first.
+
   Elastic's [PromQL limitations page](https://www.elastic.co/docs/reference/query-languages/promql/promql-limitations) lists the rest, and the list is getting shorter.
 
 One difference is not an error. A Grafana variable lists every value inside the time range you ask for, and Elastic can answer for a far longer range than Prometheus — so a variable can offer pods that are long gone. That is the retention argument, turning up in a dropdown.
@@ -171,7 +173,7 @@ Chapter 07's checks: Grafana is deployed with two datasources, both `type: prome
 
 - **Say it:** "Keep Grafana: add Elastic as a Prometheus datasource, and the PromQL in your dashboards runs against it. Let's test your top five together. The same PromQL runs in Kibana, next to your logs and traces, over as much history as you keep."
 - **Ask:** "Which five dashboards would you test first?" and "Do any of them use exemplars, or functions beyond the basics?"
-- **If they say** "Do we have to rebuild our dashboards?": often not. Test their most important ones through the Elastic datasource, and be precise about the gaps above. Elastic also has a [migration tool](https://www.elastic.co/observability-labs/blog/grafana-elastic-kubernetes-dashboard-migration) that converts Grafana dashboards to Kibana and keeps their PromQL; check its current status before you offer it.
+- **If they say** "Do we have to rebuild our dashboards?": often not. Test their most important ones through the Elastic datasource, and be precise about the gaps above. Elastic's migration tool, [GA in 9.5](https://www.elastic.co/blog/whats-new-elastic-9-5-0), brings Grafana dashboards and alerts into Kibana; test what it converts, as you would the datasource.
 - **Tailor it:** the datasource URL names a data stream or a pattern: `metrics-*.prometheus-*` reads every Prometheus data stream through one datasource.
 - **Keep the key in a Secret:** here, as in superdemo, the API key is written into Grafana's datasource ConfigMap, which is fine for a lab. In a customer's cluster, put it in a Secret, give it to Grafana as an environment variable, and reference that variable in `secureJsonData`: Grafana expands environment variables in provisioning files.
 - **In superdemo:** Grafana has the same two datasources, and Kibana has the saved search you imported, with its PromQL tab. Those are the two places to show this chapter's outcome.
