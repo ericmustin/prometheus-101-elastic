@@ -193,7 +193,7 @@ One row: `prometheus-101`, `lab`, `1`. The labels you stamped in `external_label
 
 *Why this shape:* `count by` the label that names a cluster gives one row per cluster still sending. In a customer's estate with twenty clusters, a row that disappears is a cluster that stopped sending, and this is the view no single Prometheus can give them.
 
-**Instant or range.** Prometheus's Table tab is an *instant* query: one answer, now. Its Graph tab is a *range* query: a point every step. In Kibana you choose with one parameter: `time=?_tend` answers at the end of the date picker's range, and `step=1m` gives a point a minute across it.
+**Instant or range.** Prometheus's Table tab is an *instant* query: one answer, now. Its Graph tab is a *range* query: a point every step. In Kibana you choose with one parameter: `time=?_tend` answers at the end of the date picker's range, and `step=1m` gives a point a minute across it. An instant query has nothing to chart, so Discover's chart reads "No results found" above a full table; hide the chart with its toggle, and show it again for a range query.
 
 ### A burst of errors you may see
 
