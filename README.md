@@ -14,7 +14,7 @@ Seven chapters later you have superdemo's trading app, its Redis exporter, kube-
 
 The app and its layout come from superdemo: its `router` service, namespaces, ports, `build.sh` idiom, remote write endpoint and data stream. So when you open superdemo afterwards, its Prometheus setup will look familiar.
 
-**About an hour of hands-on work**, assuming setup is done in advance, or the eight walkthrough videos on their own.
+**About 75 minutes of hands-on work**, assuming setup is done in advance: a scripted run of chapters 01–07, every wait included, takes 64. Or watch the eight walkthrough videos on their own, 65 minutes in all.
 
 ---
 
