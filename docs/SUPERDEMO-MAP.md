@@ -32,7 +32,7 @@ superdemo's Prometheus surface is five files, and you have worked with the equiv
 | 06 | filtering at the scrape and at remote write | any scrape job, and the `remote_write` block |
 | 07 | Elastic as a Grafana datasource | the same two datasources, and the saved search in `assets/objects/metrics_esql.ndjson` |
 
-superdemo's Prometheus names its three targets directly, the way chapter 03 starts. Discovery, relabeling and filtering are what you add as an environment grows.
+superdemo's Prometheus names its three targets directly, as chapter 03's note "Why not just list the targets?" shows. Discovery, relabeling and filtering are what you add as an environment grows.
 
 ---
 

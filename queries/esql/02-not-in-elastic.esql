@@ -1,6 +1,0 @@
-// While remote write is failing, ask Elastic for the failure counter.
-// Nothing comes back: Elastic cannot see a pipe that is not delivering, so a
-// broken remote write is debugged at the source, in Prometheus. Once data
-// flows, the same counter arrives here too.
-PROMQL index=${DATA_STREAM} step=1m
-  prometheus_remote_storage_samples_failed_total

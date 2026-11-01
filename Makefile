@@ -1,14 +1,14 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-# `make chapter 3` takes a bare number. Swallow it so make does not try to
-# build "3" as a target of its own.
-ifneq (,$(filter chapter,$(firstword $(MAKECMDGOALS))))
+# `make chapter 3` and `make catchup 3` take a bare number. Swallow it so make
+# does not try to build "3" as a target of its own.
+ifneq (,$(filter chapter catchup,$(firstword $(MAKECMDGOALS))))
   CHAPTER_ARG := $(wordlist 2,2,$(MAKECMDGOALS))
   $(eval $(CHAPTER_ARG):;@:)
 endif
 
-.PHONY: help setup check apply test goals hint answer chapter status \
+.PHONY: help setup check apply test goals hint answer chapter catchup status \
         ksm collector grafana links import \
         esql logs clean
 
@@ -25,12 +25,14 @@ help:
 	@echo "  make answer         the change this chapter is asking for"
 	@echo
 	@echo "  make chapter 3      start chapter 3"
-	@echo "  make status         which chapter am I on?"
+	@echo "  make catchup 4      behind? start chapter 4 with the cluster caught up"
+	@echo "  make status         which chapter am I on? am I ready for the session?"
 	@echo
 	@echo "  make ksm            chapter 04: install kube-state-metrics"
 	@echo "  make collector      chapter 05: deploy the EDOT collector"
 	@echo "  make grafana        chapter 07: add Grafana's Elastic datasource"
-	@echo "  make links          chapter 02+: every course query, ready to paste in Kibana"
+	@echo "  make links          chapter 02+: this chapter's queries, ready to paste in Kibana"
+	@echo "  make links ALL=1    ...every chapter's"
 	@echo "  make import         chapter 07: import superdemo's saved search"
 	@echo
 	@echo "  make esql Q=queries/esql/03-requests-by-region.esql"
@@ -46,11 +48,12 @@ hint:       ; @scripts/chapter.sh hint
 answer:     ; @scripts/chapter.sh answer
 status:     ; @scripts/chapter.sh status
 chapter:    ; @scripts/chapter.sh $(CHAPTER_ARG)
+catchup:    ; @scripts/chapter.sh catchup $(CHAPTER_ARG)
 
 ksm:        ; @utils/ksm/ksm.sh
 collector:  ; @./build.sh -o local
 grafana:    ; @./build.sh -g elastic
-links:      ; @scripts/kibana.sh links
+links:      ; @ALL="$(ALL)" scripts/kibana.sh links
 import:     ; @scripts/kibana.sh import
 
 esql:

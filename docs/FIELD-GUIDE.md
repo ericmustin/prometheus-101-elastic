@@ -1,6 +1,6 @@
 # Field guide
 
-The workshop's customer-facing material in one place: the story, the PromQL patterns behind every dashboard, the questions to ask, the objections you will hear, and a five-minute demo to run in Kibana. Each part points back to the chapter that teaches it.
+The workshop's customer-facing material in one place: the story, the PromQL patterns behind every dashboard, the questions to ask, the objections you will hear, and a five-minute demo to run in Kibana. Each part points back to the chapter that teaches it. Each chapter ends with one **Say it** sentence and an **In the field** note, and this guide gathers what those notes say.
 
 ---
 
@@ -103,7 +103,7 @@ Customers ask this right after dashboards.
 
 ## Five-minute demo, in Kibana
 
-Run it against a cluster at the end of chapter 07, or a running superdemo. Every query is in `queries/esql/`, and `make links` opens each one in Discover.
+Run it against a cluster at the end of chapter 07, or a running superdemo. Every query is in `queries/esql/`, and `make links ALL=1` prints a link that opens each one in Discover.
 
 1. **"Your Prometheus, unchanged."** Show `prometheus/prometheus.yml`: scrape jobs, and one `remote_write` block. *Nothing else changed in Prometheus.*
 2. **"Every cluster, in one place."** `count by (cluster, env) (up)` (`02-clusters.esql`). *One row per cluster; a missing row is a cluster that stopped sending.*

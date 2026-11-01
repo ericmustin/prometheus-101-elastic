@@ -1,77 +1,61 @@
 # Chapter 03 — Scrape the trading app
 
-**Goal:** scrape the trading app by naming its targets, see why that stops scaling, then let Kubernetes tell Prometheus what to scrape and how to label it.
+**Goal:** let Kubernetes tell Prometheus what to scrape, label every series with where it runs, and ask the golden-signal questions in Kibana.
+
+**Time:** 12 minutes
 
 ## Why it matters
 
-- **The problem:** a metric is only as useful as its labels. "Requests per second" helps nobody; "requests per second in EMEA, for the router" does. And in Kubernetes things move, so a list of addresses goes stale the day someone adds a service.
-- **What Prometheus does:** Kubernetes discovery finds every pod that asks to be scraped, and relabeling turns what Kubernetes knows (namespace, pod, service, node) into labels you query by.
-- **Why it's worth it:** new services are covered without a ticket, and every team's metrics carry the same dimensions, so one dashboard or alert works for every region. That consistency is what makes an estate's metrics queryable as a whole, in Prometheus and in Elastic.
+A metric is only as useful as its labels: "requests per second in EMEA, for the router" helps, "requests per second" doesn't. Kubernetes discovery finds every pod that asks to be scraped, and relabeling turns what Kubernetes knows into labels, so new services are covered without a ticket and one dashboard works for every region.
 
----
+![Where you are, before chapter 03: The routers and Redis serve metrics. Nothing collects them yet. This chapter: Let Kubernetes find the routers and Redis, and label them.](../docs/images/topology-03-before.png)
 
-## Where you are
+## Steps at a glance
 
-Prometheus scrapes itself and sends its own metrics to Elastic. The trading app's routers and the Redis exporter serve metrics that nothing collects yet. This chapter collects them, first by naming them, then by letting Kubernetes tell Prometheus where they are.
+1. Start the chapter: `make chapter 3`
+2. Let Prometheus list pods: `kubectl apply -f utils/prometheus-grafana/rbac.yml`
+3. Mark the router for scraping: two annotations in `k8s/router.yaml`, then `./build.sh -s router`
+4. Add the `kubernetes-pods` discovery job to `prometheus/prometheus.yml`
+5. Apply it: `make apply`, then check the Targets page
+6. See it: where every target runs, in Kibana
+7. Ask the golden-signal questions: rate and latency per region
+8. Grade it: `make test`
 
-![Where you are, before chapter 03: The routers and Redis serve metrics. Nothing collects them yet. This chapter: Scrape the routers and Redis, then let Kubernetes tell Prometheus where they are.](../docs/images/topology-03-before.png)
-
-```bash
-make goals
-```
-
-Chapters 01 and 02 pass. Chapter 03's are to do: no router is discovered yet, and nothing carries Kubernetes labels.
-
----
-
-## Start by naming the targets
-
-The quickest way to scrape something is to list it.
-
-**▶ Your turn:** add a second job to `prometheus/prometheus.yml`, below `prometheus`:
-
-```yaml
-  - job_name: trading-app
-    static_configs:
-      - targets:
-        - router.trading-na.svc.cluster.local:9000
-        - router.trading-emea.svc.cluster.local:9000
-        - redis-service.infra.svc.cluster.local:9000
-```
-
-The two routers and the Redis exporter, by their Service hostnames. It is the same list superdemo's own Prometheus scrapes.
+## Step 1 · Start the chapter
 
 ```bash
-make apply
+make chapter 3
 ```
 
-Three new targets, all green on the Targets page. Now ask Elastic where each one runs:
+## Step 2 · Let Prometheus list pods
 
-```esql
-PROMQL index=metrics-generic.prometheus-default time=?_tend
-  up{job="trading-app"}
+Discovery asks the Kubernetes API for pods, and Prometheus's ServiceAccount needs permission to ask. This file grants it read access to pods, services, endpoints and nodes:
+
+```bash
+kubectl apply -f utils/prometheus-grafana/rbac.yml
 ```
 
-The `_timeseries` column lists each series' labels: `job` and `instance`, plus the `cluster` and `env` that `external_labels` stamped on the way out. The only thing telling North America from EMEA is a hostname. There is no namespace, pod or service to group by.
+<details>
+<summary>Note · If you skip this step</summary>
 
-## Why naming targets stops working
+Prometheus shows no targets for the job: not red, absent. The reason is in its log:
 
-Three targets are fine. The trouble starts as the app grows:
+```bash
+make logs | grep -i forbidden
+```
 
-- **Every change is an edit to this file.** A new service is scraped only once someone adds it here, and a moved one breaks until someone notices.
-- **Named targets know only what you type.** Any label you want, a namespace or a region, you add by hand and keep correct by hand. Nothing checks it.
+```
+pods is forbidden: User "system:serviceaccount:infra:prometheus"
+cannot list resource "pods" in API group "" in the namespace "trading-na"
+```
 
-Kubernetes already knows every pod, where it runs and what it is called. Prometheus can ask it.
+Apply the RBAC file and the targets appear within half a minute, with no restart, because Prometheus keeps retrying. In a customer's cluster the fix is the same kind of ClusterRole and binding, or the one their Helm chart creates.
 
----
+</details>
 
-## Let Kubernetes tell Prometheus
+## Step 3 · Mark the router for scraping
 
-The workload declares how to scrape it; Prometheus discovers it.
-
-### Half one: the workload declares
-
-**▶ Your turn:** the router's pod template has no scrape annotation yet. Add one to `k8s/router.yaml`, under the pod template's `metadata:` (`spec.template.metadata`), next to its `labels:`:
+The workload declares how it should be scraped. In `k8s/router.yaml`, under the pod template's `metadata:` (`spec.template.metadata`), next to its `labels:`, add:
 
 ```yaml
       annotations:
@@ -79,15 +63,17 @@ The workload declares how to scrape it; Prometheus discovers it.
         prometheus.io/port: "9000"
 ```
 
+Then redeploy the router:
+
 ```bash
 ./build.sh -s router
 ```
 
-Two lines, owned by the right team: the application team knows which port serves metrics, and whoever runs Prometheus does not have to.
+These are two lines, owned by the team that knows which port serves metrics. Whoever runs Prometheus doesn't have to know.
 
-### Half two: Prometheus discovers
+## Step 4 · Add the discovery job
 
-**▶ Your turn:** delete the `trading-app` job, and add this one in its place:
+In `prometheus/prometheus.yml`, add this job below the `prometheus` job:
 
 ```yaml
   - job_name: kubernetes-pods
@@ -122,13 +108,7 @@ Two lines, owned by the right team: the application team knows which port serves
         target_label: node
 ```
 
-```bash
-make apply
-```
-
-### What the rules do
-
-Discovery turns every pod in those namespaces into a candidate target, carrying `__meta_kubernetes_*` labels: its namespace, name and node, its labels and its annotations. Annotation names are made safe for Prometheus on the way, so `prometheus.io/scrape` arrives as `__meta_kubernetes_pod_annotation_prometheus_io_scrape`. Relabeling then runs top to bottom:
+Discovery turns every pod in those namespaces into a candidate target, carrying `__meta_kubernetes_*` labels. Relabeling then runs top to bottom:
 
 | Rule | What it does |
 |---|---|
@@ -137,62 +117,64 @@ Discovery turns every pod in those namespaces into a candidate target, carrying 
 | `__metrics_path__` | honours a custom path if a pod sets one; `/metrics` otherwise |
 | the last four | copy discovery metadata into labels you can query: `namespace`, `pod`, `service`, `node` |
 
-Anything still starting with `__` is dropped once relabeling finishes. That is why the pod's other labels, `pod_template_hash` among them, never reach your series: you choose what becomes a label.
+<details>
+<summary>Note · Why not just list the targets?</summary>
 
----
-
-## Discovery needs permission
-
-No targets. Not red: absent. Discovery asks the Kubernetes API for pods, and Prometheus logs why it can't:
-
-```bash
-make logs | grep -i forbidden
-```
-
-```
-pods is forbidden: User "system:serviceaccount:infra:prometheus"
-cannot list resource "pods" in API group "" in the namespace "trading-na"
-```
-
-Prometheus runs as a ServiceAccount, and nothing has granted that account permission to list pods yet. The workshop's RBAC file grants it read access to pods, services, endpoints and nodes.
-
-**▶ Your turn:**
-
-```bash
-kubectl apply -f utils/prometheus-grafana/rbac.yml
-```
-
-Targets appear within half a minute, no restart: Prometheus was already retrying. This is a common first error with Kubernetes discovery, and in a customer cluster the fix is the same ClusterRole and binding, or the one their Helm chart creates.
-
-## No backreferences
-
-`role: pod` produces one candidate per **declared container port**, so a pod declaring two gives you two targets for one workload. The obvious fix is to keep the candidate whose port matches the annotation:
+You can name them, and it is the quickest start. This is the same list superdemo's Prometheus scrapes:
 
 ```yaml
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port,
-                        __meta_kubernetes_pod_container_port_number]
-        action: keep
+  - job_name: trading-app
+    static_configs:
+      - targets:
+        - router.trading-na.svc.cluster.local:9000
+        - router.trading-emea.svc.cluster.local:9000
+        - redis-service.infra.svc.cluster.local:9000
+```
+
+Named targets carry only `job` and `instance`. Every new service is an edit to this file, and any label you want, a namespace or a region, you add and keep correct by hand. That is fine at three targets and a maintenance job at thirty. Discovery is how that list grows on its own.
+
+</details>
+
+<details>
+<summary>Note · One target per port, and no backreferences</summary>
+
+`role: pod` produces one candidate per **declared container port**, so a pod that declares two ports gives two candidates. The obvious fix, keeping the candidate whose port matches the annotation, needs a backreference:
+
+```yaml
         regex: (\d+);\1          # rejected
 ```
 
-**Prometheus regexes are RE2, which has no backreferences.** `make apply` stops at `promtool`, and nothing reaches the cluster:
+Prometheus regexes are RE2, which has no backreferences, so `make apply` stops at `promtool`: ``invalid escape sequence: `\1` ``. Rule 2 sidesteps it. Rewriting `__address__` from the annotation makes every candidate for a pod identical, and Prometheus deduplicates identical targets.
 
+</details>
+
+<details>
+<summary>Note · Where the pod's other labels go</summary>
+
+Anything still starting with `__` is dropped once relabeling finishes. That is why the pod's other labels, `pod_template_hash` among them, never reach your series: you choose what becomes a label. The `labelmap` shortcut would import every pod label, including `pod_template_hash`, which changes on every deploy and multiplies series.
+
+</details>
+
+## Step 5 · Apply it
+
+```bash
+make apply
 ```
-error parsing regexp: invalid escape sequence: `\1`
-```
 
-Rule 2 above sidesteps it: rewriting `__address__` from the annotation makes every candidate for a pod **identical**, and Prometheus deduplicates identical targets. When a relabel rule seems to need a backreference, look for a rewrite that makes the values equal instead.
+You should see the `kubernetes-pods` job on the Targets page with three targets, all **UP**: the router in `trading-na`, the router in `trading-emea`, and Redis in `infra`.
 
----
+Nothing in the job names Redis. Its manifest, `utils/redis/redis.yml`, already carries the two annotations, so the same rules found it. That is what discovery buys you: chapter 05's collector is found the same way.
 
-## What you get
+## Step 6 · See where everything runs
 
-Back in Kibana:
+In Kibana:
 
 ```esql
 PROMQL index=metrics-generic.prometheus-default time=?_tend
   count by (namespace, service) (up)
 ```
+
+You should see:
 
 ```
 count by (namespace, service) (up) | namespace    | service
@@ -202,55 +184,10 @@ count by (namespace, service) (up) | namespace    | service
 1.0                                | null         | null
 ```
 
-Each target labelled with the namespace it runs in. `infra` with no service is Redis, whose pod has no `service` label; the row with neither is Prometheus scraping itself. For about five minutes after the change that row reads 4: the named targets you deleted, still showing their last scrape, because a series stays visible until its last sample leaves the lookback window.
+Each target is labelled with the namespace it runs in. `infra` with no service is Redis, whose pod has no `service` label, and the row with neither is Prometheus scraping itself. `count by` the labels you care about is the inventory pattern.
 
-*Why this shape:* `count by` the labels you care about is the inventory pattern: how many of each thing, grouped the way the business asks.
-
-And something you did not ask for:
-
-```esql
-PROMQL index=metrics-generic.prometheus-default time=?_tend
-  redis_up
-```
-
-The Redis exporter, from the `kubernetes-pods` job. Nothing in that job names it: `utils/redis/redis.yml` already carries the two annotations, so the same rules found it. **This is what discovery buys you:** chapter 05's collector is found the same way, with no new scrape config. Chapter 04 shows the exception.
-
----
-
-## Labels pay off: the golden signals
-
-Labels are why you can now ask the questions every service dashboard asks. They are known as **RED**: **R**ate, **E**rrors, **D**uration.
-
-**Rate**, requests per second per region:
-
-```esql
-PROMQL index=metrics-generic.prometheus-default step=1m
-  sum by (region) (rate(http_requests_total[5m]))
-```
-
-*Why this shape:* `http_requests_total` only ever goes up, so its raw value means nothing. `rate()` turns it into a per-second figure and copes with restarts, which reset the counter to zero. `sum by (region)` adds up every pod behind a region and keeps the one label the question is about.
-
-**Errors**, the same rate split by status code:
-
-```esql
-PROMQL index=metrics-generic.prometheus-default step=1m
-  sum by (region, status) (rate(http_requests_total[5m]))
-```
-
-Every line here is `200`. An error ratio divides the `5xx` rate by the total, the number most availability targets are written against. Here it returns no result rather than 0, because no `5xx` series exists yet: absent, not zero, which chapter 05 comes back to.
-
-**Duration**, the 95th percentile per region:
-
-```esql
-PROMQL index=metrics-generic.prometheus-default step=1m
-  histogram_quantile(0.95, sum by (le, region) (rate(http_request_duration_seconds_bucket[5m])))
-```
-
-*Why this shape:* a histogram counts requests into buckets (`le` is "less than or equal to"), so buckets from every pod can be added up before the percentile is taken. An average hides the slow requests users actually feel; the 95th percentile shows them.
-
-The same three queries run unchanged in Prometheus and in Grafana. Here they also run over as much history as your data stream keeps.
-
-And in ES|QL, where you can look at the documents themselves:
+<details>
+<summary>Note · The same labels, as documents</summary>
 
 ```bash
 make esql Q=queries/esql/03-identity.esql
@@ -262,43 +199,119 @@ labels.cluster |  labels.env   |labels.namespace|labels.service |      labels.po
 prometheus-101 |lab            |trading-na      |router         |router-c59f76fc6-k8rqx |na
 ```
 
-`cluster`/`env` from chapter 02's `external_labels`, `namespace`/`service`/`pod` from the rules you just wrote, `region` from the application. Your pod name will differ.
+`cluster` and `env` come from chapter 02's `external_labels`; `namespace`, `service` and `pod` from the rules you just wrote; `region` from the application. Your pod name will differ.
 
----
+</details>
 
-## Grade it
+## Step 7 · Ask the golden-signal questions
+
+Requests per second, per region:
+
+```esql
+PROMQL index=metrics-generic.prometheus-default step=1m
+  sum by (region) (rate(http_requests_total[5m]))
+```
+
+The 95th-percentile latency, per region:
+
+```esql
+PROMQL index=metrics-generic.prometheus-default step=1m
+  histogram_quantile(0.95, sum by (le, region) (rate(http_request_duration_seconds_bucket[5m])))
+```
+
+You should see two lines on each chart, `na` and `emea`. `rate()` turns a counter that only goes up into a per-second figure, `sum by (region)` adds up the pods behind each region, and the 95th percentile shows the slow requests an average hides. These are the Rate and Duration of **RED** (Rate, Errors, Duration), and they run unchanged in Prometheus and in Grafana.
+
+<details>
+<summary>Note · Errors, and absent versus zero</summary>
+
+The same rate, split by status code:
+
+```esql
+PROMQL index=metrics-generic.prometheus-default step=1m
+  sum by (region, status) (rate(http_requests_total[5m]))
+```
+
+Every line here is `200`. An error ratio divides the `5xx` rate by the total, and here it returns no result rather than 0, because no `5xx` series exists yet. Absent is not the same as zero, and an alert has to allow for it.
+
+</details>
+
+## Step 8 · Grade it
 
 ```bash
 make test
 ```
 
-Chapter 03's checks: one healthy router per region, found by discovery and labelled with its own namespace; Redis found by the same rules; the `trading-app` job gone, so nothing is scraped twice; Prometheus allowed to list pods; only the labels you chose, so no `pod_template_hash`; the Kubernetes labels arriving in Elastic; and requests per region answering in Kibana.
+You should see every check pass: both routers and Redis found by discovery, labelled with where they run, and those labels arriving in Elastic.
 
-## What you collect now
+## The whole change
+
+In `k8s/router.yaml`, under `spec.template.metadata`:
+
+```yaml
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+```
+
+In `prometheus/prometheus.yml`, below the `prometheus` job:
+
+```yaml
+  - job_name: kubernetes-pods
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ["trading-na", "trading-emea", "infra"]
+
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: "true"
+
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_label_service]
+        target_label: service
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+```
+
+The commands, in order:
+
+```bash
+make chapter 3
+kubectl apply -f utils/prometheus-grafana/rbac.yml
+./build.sh -s router
+make apply
+make test
+```
+
+## Say it
+
+"Your workloads declare how to be scraped, and Prometheus finds them. Every metric arrives labelled with where it came from, so the same dashboard works for every region and every new service."
 
 ![What you collect after chapter 03: Both routers and Redis, found by discovery and labelled by namespace and service. Now you can answer: Requests and trades, by region, namespace and service.](../docs/images/topology-03-after.png)
 
-## In the field
+<details>
+<summary>Note · In the field</summary>
 
-- **Say it:** "Your workloads declare how to be scraped, and Prometheus finds them. Every metric arrives labelled with where it came from, so the same dashboard works for every region and every new service."
 - **Ask:** "How does a new service get monitored today: a ticket, a config change, or automatically?" and "Do your teams use the same labels for the same things?"
-- **If they say** "We use the Prometheus Operator": good, its ServiceMonitor and PodMonitor resources do the job these annotations do here. Everything after discovery, the labels, remote write and PromQL, works the same.
+- **If they say** "We use the Prometheus Operator": good. Its ServiceMonitor and PodMonitor resources do the job these annotations do here. Everything after discovery, the labels, remote write and PromQL, works the same.
 - **Good practice:** labels become dimensions in Elastic (`labels.namespace`, `labels.service`), so choose them on purpose: enough to group and filter by, without per-request values that multiply series.
-- **In superdemo:** its Prometheus names its three targets, the way this chapter starts. Discovery is how that setup grows: annotate a workload, and the same rules find it.
+- **In superdemo:** its Prometheus names its three targets, as in the first note under Step 4. Discovery is how that setup grows: annotate a workload, and the same rules find it.
 
-**Explain it back:** a customer's engineer asks why every panel on their dashboard wraps a counter in `rate()`, and why latency is a percentile rather than an average. Answer in two sentences.
-
-## What you now know
-
-![Chapter 03 on one page: targets named by hand carry only job and instance. With discovery, pods declare scrape annotations and the kubernetes-pods job finds both routers and Redis, labelled by namespace, pod, service and node. Watch for RBAC and for RE2's missing backreferences. The workload declares, Prometheus discovers.](../docs/images/03-discover-the-app.png)
-
-| | |
-|---|---|
-| **Named targets** | fine at three, a maintenance job at thirty |
-| **Annotation discovery** | a contract: the workload declares, Prometheus discovers |
-| **Relabeling** | turns discovery metadata into the labels you query by |
-| **RBAC** | a ServiceAccount is identity; permission is separate |
-| **RE2** | no backreferences: `promtool` rejects `\1`; rewrite `__address__` instead |
-| **RED** | rate, errors, duration: `rate()`, `sum by`, `histogram_quantile` |
+</details>
 
 Next: cluster state, from kube-state-metrics.
