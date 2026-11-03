@@ -24,6 +24,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${ROOT_DIR}/scripts/lib/env.sh"
 # shellcheck source=assets/scripts/retry.sh
 source "${ROOT_DIR}/assets/scripts/retry.sh"
+# shellcheck source=scripts/lib/ready.sh
+source "${ROOT_DIR}/scripts/lib/ready.sh"
 
 # ---------------------------------------------------------------- defaults
 course="${COURSE:-o11y--course--field--prom-101--local}"
@@ -96,16 +98,13 @@ if [[ "${build_service}" == "true" ]]; then
   done
 fi
 
+# The images a later chapter starts (the collector, kube-state-metrics, and
+# Grafana, which chapter 07 restarts), pulled onto every node so no chapter
+# waits on a download. Pulled, not deployed. The images this run deploys need
+# no help: kubelet pulls them now, while you wait for setup anyway.
 if [[ "${pull_images}" == "true" ]]; then
-  log_step "Pre-pulling third-party images"
-  for img in nginx:1.27-alpine curlimages/curl:8.11.1 redis:7.2-alpine \
-             oliver006/redis_exporter:latest prom/prometheus:v3.7.3 \
-             grafana/grafana:11.6.0 docker.elastic.co/elastic-agent/elastic-agent:9.5.0; do
-    docker image inspect "${img}" >/dev/null 2>&1 || docker pull -q "${img}" >/dev/null 2>&1 || \
-      log_warn "could not pre-pull ${img}"
-    k3d image import "${img}" -c "${CLUSTER_NAME}" >/dev/null 2>&1 || true
-  done
-  log_ok "images available in the cluster"
+  log_step "Pre-pulling the images later chapters start"
+  prepull_images
 fi
 
 # ---------------------------------------------------------------- prereqs

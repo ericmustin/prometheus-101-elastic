@@ -8,11 +8,14 @@
 #   5. deploy the trading app, Redis, Prometheus and Grafana (via build.sh)
 #   6. Gate 0.5 - prove the router really is exposing the metrics this
 #      course is about to spend seven chapters teaching you to collect
+#   7. the "Ready for the session" checklist (make status repeats it)
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/env.sh
 source "${ROOT_DIR}/scripts/lib/env.sh"
+# shellcheck source=lib/ready.sh
+source "${ROOT_DIR}/scripts/lib/ready.sh"
 
 # ---------------------------------------------------------------- 1. machine
 "${ROOT_DIR}/scripts/check-env.sh" >/dev/null || die "Gate 0 failed. Run scripts/check-env.sh to see why."
@@ -180,5 +183,8 @@ log_info "router (na)    : ${ROUTER_NA_URL}/metrics"
 log_info "router (emea)  : ${ROUTER_EMEA_URL}/metrics"
 log_info "Grafana        : ${GRAFANA_URL}"
 log_info "data stream    : ${DATA_STREAM}"
+
+# ------------------------------------------------------------- 7. checklist
+readiness_checklist
 echo
 log_info "Next: open chapters/01-scrape-yourself.md and edit prometheus/prometheus.yml"

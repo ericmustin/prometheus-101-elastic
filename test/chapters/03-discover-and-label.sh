@@ -38,10 +38,10 @@ assert_ge "${ns_correct}" "${want_routers}" \
 # cannot pass it.
 named="$(prom_targets | jq -r '[.data.activeTargets[] | select(.labels.job == "trading-app")] | length' 2>/dev/null || echo "")"
 if [[ "${routers}" -lt 1 || -z "${named}" ]]; then
-  fail "the trading-app job is gone, so each router is scraped once" \
+  fail "no job scrapes the routers by name, so each is scraped once" \
     "no router has been discovered yet, so there is nothing to compare against"
 else
-  assert_eq "${named}" "0" "the trading-app job is gone, so each router is scraped once"
+  assert_eq "${named}" "0" "no job scrapes the routers by name, so each is scraped once"
 fi
 
 # The redis_exporter sidecar. utils/redis/redis.yml already carries the scrape

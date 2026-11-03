@@ -1,4 +1,0 @@
-// Empty until a send first fails: the collector creates this counter lazily.
-// Absent, not zero.
-PROMQL index=${DATA_STREAM} time=?_tend
-  otelcol_exporter_send_failed_metric_points

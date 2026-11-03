@@ -2,7 +2,9 @@
 # Chapter 07 helper (and used from chapter 02 onward).
 #
 #   scripts/kibana.sh links [file]   - print each query ready to paste, plus a
-#                                      link that opens it already typed
+#                                      link that opens it already typed. With
+#                                      no file: the current chapter's queries
+#                                      (queries/esql/NN-*.esql); ALL=1 for all
 #   scripts/kibana.sh import         - import superdemo's own saved search
 #                                      (assets/objects/metrics_esql.ndjson)
 #
@@ -44,12 +46,26 @@ links() {
   [[ -n "${KIBANA_URL:-}" ]] || die "KIBANA_URL must be set in .env."
   [[ -n "${DATA_STREAM}" ]] || die "DATA_STREAM is not set."
 
-  local files=()
+  local files=() chapter=""
   if [[ -n "${1:-}" ]]; then
     [[ -f "$1" ]] || die "No such query file: $1"
     files=("$1")
-  else
+  elif [[ "${ALL:-}" == 1 ]]; then
     files=("${ROOT_DIR}"/queries/esql/*.esql)
+  else
+    # Only the chapter you are on: its files are named after it, NN-*.esql.
+    [[ -f "${ROOT_DIR}/.chapter" ]] && chapter="$(tr -dc '0-9' < "${ROOT_DIR}/.chapter")"
+    if [[ -z "${chapter}" ]]; then
+      log_info "No chapter started yet, so here is every course query."
+      files=("${ROOT_DIR}"/queries/esql/*.esql)
+    else
+      chapter="$(printf '%02d' "$((10#${chapter}))")"
+      files=("${ROOT_DIR}"/queries/esql/"${chapter}"-*.esql)
+      if [[ ! -f "${files[0]}" ]]; then
+        log_info "Chapter ${chapter} has no Kibana queries. make links ALL=1 prints every chapter's."
+        return 0
+      fi
+    fi
   fi
 
   local file name query encoded
@@ -66,6 +82,7 @@ links() {
   done
 
   printf '\nPaste the query, or follow the link - both give you the same thing.\n'
+  [[ -z "${chapter}" ]] || printf "These are chapter %s's. Every chapter's: make links ALL=1\n" "${chapter}"
 }
 
 import_saved_objects() {

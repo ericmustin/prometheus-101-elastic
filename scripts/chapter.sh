@@ -3,7 +3,8 @@
 # chapter you are on is a number in .chapter (gitignored).
 #
 #   make chapter 3    start chapter 3
-#   make status       which chapter am I on?
+#   make catchup 4    start chapter 4 with the cluster caught up to its start
+#   make status       which chapter am I on? (and the readiness checklist)
 #   make hint         what is still different from the solution?
 #   make answer       the change this chapter is asking for
 #
@@ -16,6 +17,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 # shellcheck source=lib/env.sh
 source "${ROOT_DIR}/scripts/lib/env.sh"
+# shellcheck source=lib/ready.sh
+source "${ROOT_DIR}/scripts/lib/ready.sh"
 
 CONFIG="prometheus/prometheus.yml"
 STATE="${ROOT_DIR}/.chapter"
@@ -92,6 +95,110 @@ start_chapter() {
   show_status
 }
 
+# Start chapter N with the cluster where chapter N begins: make chapter N,
+# then what every EARLIER chapter did, then make apply. Never chapter N's own
+# work - that is what you are about to do. The thresholds match
+# prometheus-101-videos/scripts/demo-reset.sh: a thing chapter NN introduces
+# is absent for targets <= NN and present for targets > NN.
+#
+# Going back undoes later chapters' cluster work the way demo-reset does, so
+# `make catchup 4` after chapter 05 really is chapter 04's start, with
+# kube-state-metrics not yet installed. Unlike demo-reset it keeps
+# Prometheus's history and the routers' counters.
+catch_up() {
+  [[ "${1:-}" =~ ^[0-9]{1,2}$ ]] || die "Usage: make catchup <chapter>, e.g. make catchup 4"
+  local n; n="$(pad "$1")"
+  local i=$((10#${n}))
+  [[ "${i}" -ge 1 && "${i}" -le "$((10#${LAST_CHAPTER}))" ]] || die "Chapters are 01-${LAST_CHAPTER}."
+
+  # Everything below changes a cluster. Make sure it is the course's.
+  local ctx; ctx="$(kubectl config current-context 2>/dev/null || true)"
+  if [[ "${ctx}" != "k3d-${CLUSTER_NAME}" ]]; then
+    log_fail "kubectl points at '${ctx:-nothing}', not k3d-${CLUSTER_NAME}."
+    log_hint "  kubectl config use-context k3d-${CLUSTER_NAME}"
+    exit 1
+  fi
+  kubectl get --raw /readyz --request-timeout=5s >/dev/null 2>&1     || die "The k3d cluster '${CLUSTER_NAME}' is not answering. Run: make setup"
+  if [[ "${i}" -ge 5 ]] && ! command -v helm >/dev/null 2>&1; then
+    die "Chapter ${n} starts with kube-state-metrics installed, which needs helm. macOS: brew install helm"
+  fi
+
+  start_chapter "${n}"
+
+  log_step "Undoing anything from chapter ${n} or later"
+  local undone=0
+  if [[ "${i}" -le 3 ]] && has_rbac; then
+    kubectl delete clusterrolebinding prometheus-101 >/dev/null
+    kubectl delete clusterrole prometheus-101 >/dev/null 2>&1 || true
+    log_ok "RBAC removed (chapter 03 applies it). The ServiceAccount stays."
+    undone=1
+  fi
+  if [[ "${i}" -le 3 ]] && has_router_annotation; then
+    local ns key
+    for ns in $(namespaces_from_region); do
+      for key in prometheus.io~1scrape prometheus.io~1port; do
+        kubectl -n "${ns}" patch deploy/router --type=json \
+          -p "[{\"op\":\"remove\",\"path\":\"/spec/template/metadata/annotations/${key}\"}]" >/dev/null 2>&1 || true
+      done
+      kubectl -n "${ns}" rollout status deploy/router --timeout=180s >/dev/null
+    done
+    log_ok "router scrape annotation removed (chapter 03 adds it)"
+    undone=1
+  fi
+  if [[ "${i}" -le 4 ]] && has_ksm; then
+    helm uninstall kube-state-metrics -n default >/dev/null
+    kubectl wait --for=delete pod --all-namespaces -l app.kubernetes.io/name=kube-state-metrics \
+      --timeout=120s >/dev/null 2>&1 || true
+    log_ok "kube-state-metrics removed (chapter 04 installs it)"
+    undone=1
+  fi
+  if [[ "${i}" -le 5 ]] && has_collector; then
+    kubectl delete -f "${ROOT_DIR}/agents/apm/local.yaml" --ignore-not-found >/dev/null
+    kubectl -n "${PROM_NAMESPACE}" wait --for=delete pod -l service=otel-collector \
+      --timeout=120s >/dev/null 2>&1 || true
+    log_ok "EDOT collector removed (chapter 05 deploys it)"
+    undone=1
+  fi
+  # Every chapter starts before chapter 07's work, so Grafana reads only the
+  # local Prometheus. build.sh restarts Grafana when that changes its list.
+  if has_grafana_elastic; then
+    "${ROOT_DIR}/build.sh" -g true > "${TMP_DIR}/catchup-grafana.log" 2>&1 \
+      || { cat "${TMP_DIR}/catchup-grafana.log" >&2; die "build.sh -g true failed."; }
+    log_ok "Grafana reads only the local Prometheus again (chapter 07 adds Elastic)"
+    undone=1
+  fi
+  [[ "${undone}" -eq 1 ]] || log_ok "nothing to undo"
+
+  if [[ "${i}" -ge 4 ]]; then
+    log_step "Chapter 03's work: RBAC and the router's scrape annotation"
+    kubectl apply -f "${ROOT_DIR}/utils/prometheus-grafana/rbac.yml" >/dev/null
+    log_ok "RBAC applied"
+    "${ROOT_DIR}/build.sh" -s router
+    for ns in $(namespaces_from_region); do
+      kubectl -n "${ns}" rollout status deploy/router --timeout=180s >/dev/null
+    done
+  fi
+  if [[ "${i}" -ge 5 ]]; then
+    log_step "Chapter 04's work: kube-state-metrics"
+    "${ROOT_DIR}/utils/ksm/ksm.sh"
+    local ksm_ns
+    ksm_ns="$(kubectl get deploy --all-namespaces -l app.kubernetes.io/name=kube-state-metrics \
+              -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)"
+    [[ -n "${ksm_ns}" ]] && kubectl -n "${ksm_ns}" rollout status deploy/kube-state-metrics --timeout=180s >/dev/null
+    log_ok "kube-state-metrics is running"
+  fi
+  if [[ "${i}" -ge 6 ]]; then
+    log_step "Chapter 05's work: the EDOT collector"
+    "${ROOT_DIR}/build.sh" -o local
+  fi
+
+  "${ROOT_DIR}/scripts/apply-config.sh"
+
+  echo
+  log_ok "Caught up: the cluster is at chapter ${n}'s start."
+  log_hint "make goals shows only chapter ${n}'s own checks still to do."
+}
+
 # What is still different between your file and the solution?
 # Comments are ignored: grading is behavioural, so a learner who writes a
 # working config without copying the prose should not be told they are wrong.
@@ -157,9 +264,10 @@ show_answer() {
 }
 
 case "${1:-status}" in
-  status)  show_status ;;
+  status)  show_status; readiness_checklist ;;
   hint)    show_hint ;;
   answer)  show_answer ;;
+  catchup) catch_up "${2:-}" ;;
   [0-9]|[0-9][0-9]) start_chapter "$1" ;;
-  *) die "Usage: $(basename "$0") [status|hint|answer|<chapter-number>]" ;;
+  *) die "Usage: $(basename "$0") [status|hint|answer|catchup <n>|<chapter-number>]" ;;
 esac
